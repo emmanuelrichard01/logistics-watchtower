@@ -7,6 +7,10 @@
 [![Redpanda](https://img.shields.io/badge/Redpanda-Kafka%20Compatible-red.svg)](https://redpanda.com)
 [![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)](https://docker.com)
 
+<p align="center">
+  <img src="doc/images/demo.gif" alt="Logistics Watchtower Demo" width="800"/>
+</p>
+
 ---
 
 ## Overview
