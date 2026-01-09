@@ -18,35 +18,39 @@ Cold chain logistics fail when sensitive cargo (pharmaceuticals, perishables) ex
 
 The platform implements a decoupled **Event-Driven Architecture (EDA)** where components communicate exclusively via message passing.
 
-graph LR  
-    subgraph IoT\_Edge \["IoT Edge (Simulation)"\]  
-        Trucks\[🚚 Smart Producer\]  
+graph LR
+    %% ===== IoT Edge =====
+    subgraph IoT_Edge["IoT Edge (Simulation)"]
+        Trucks["🚚 Smart Producer"]
     end
 
-    subgraph Infrastructure \["Streaming Infrastructure"\]  
-        Redpanda\[🔴 Redpanda Broker\]  
+    %% ===== Infrastructure =====
+    subgraph Infrastructure["Streaming Infrastructure"]
+        Redpanda["🔴 Redpanda Broker"]
     end
 
-    subgraph Processing \["Processing Layer"\]  
-        StreamProc\[⚙️ Quix Stream Processor\]  
+    %% ===== Processing =====
+    subgraph Processing["Processing Layer"]
+        StreamProc["⚙️ Quix Stream Processor"]
     end
 
-    subgraph Serving \["Serving Layer"\]  
-        API\[🔌 FastAPI WebSocket Gateway\]  
+    %% ===== Serving =====
+    subgraph Serving["Serving Layer"]
+        API["🔌 FastAPI WebSocket Gateway"]
     end
 
-    subgraph UI \["User Interface"\]  
-        Map\[🗺️ Live Map Dashboard\]  
+    %% ===== UI =====
+    subgraph UI["User Interface"]
+        Map["🗺️ Live Map Dashboard"]
     end
 
-    Trucks \-- "JSON Telemetry" \--\> Redpanda  
-    Redpanda \-- "Topic: telemetry" \--\> StreamProc  
-      
-    StreamProc \-- "Filter & Enrich" \--\> StreamProc  
-    StreamProc \-- "Topic: alerts" \--\> Redpanda  
-      
-    Redpanda \-- "Consume (Both Topics)" \--\> API  
-    API \-- "WebSocket Push" \--\> Map
+    %% ===== Data Flow =====
+    Trucks -->|"JSON Telemetry"| Redpanda
+    Redpanda -->|"Topic: telemetry"| StreamProc
+    StreamProc -->|"Filter & Enrich"| StreamProc
+    StreamProc -->|"Topic: alerts"| Redpanda
+    Redpanda -->|"Consume (Both Topics)"| API
+    API -->|"WebSocket Push"| Map
 
 ### **Component Responsibilities**
 
