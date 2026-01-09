@@ -370,82 +370,289 @@
         }
 
         /* ══════════════════════════════════════════════════════════════════
-           TOAST NOTIFICATIONS
+           ALERT NOTIFICATIONS (FAANG-Level)
            ══════════════════════════════════════════════════════════════════ */
-        .toast-container {
+        .alert-container {
             position: fixed;
-            top: 16px;
-            right: 16px;
+            top: 20px;
+            right: 20px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            z-index: 2000;
-            max-width: 360px;
-        }
-
-        .toast {
-            display: flex;
-            align-items: flex-start;
             gap: 12px;
-            padding: 14px 16px;
-            background: var(--bg-card);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-            animation: slideIn 0.3s ease;
+            z-index: 2000;
+            max-width: 400px;
+            pointer-events: none;
         }
 
-        @keyframes slideIn {
-            from {
+        .alert-notification {
+            pointer-events: auto;
+            position: relative;
+            display: flex;
+            gap: 14px;
+            padding: 16px 18px;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+            backdrop-filter: blur(20px);
+            border-radius: 14px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.05),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            animation: alertEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            transform-origin: top right;
+            overflow: hidden;
+        }
+
+        .alert-notification.exiting {
+            animation: alertExit 0.4s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+        }
+
+        @keyframes alertEnter {
+            0% {
                 opacity: 0;
-                transform: translateX(100px);
+                transform: translateX(100%) scale(0.8);
             }
 
-            to {
+            100% {
                 opacity: 1;
-                transform: translateX(0);
+                transform: translateX(0) scale(1);
             }
         }
 
-        .toast-icon {
-            width: 32px;
-            height: 32px;
-            background: rgba(239, 68, 68, 0.15);
-            border-radius: 8px;
+        @keyframes alertExit {
+            0% {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(50%) scale(0.9);
+            }
+        }
+
+        /* Severity border glow */
+        .alert-notification::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            border-radius: 14px 0 0 14px;
+        }
+
+        .alert-notification.critical::before {
+            background: linear-gradient(180deg, #ef4444, #dc2626);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+        }
+
+        .alert-notification.high::before {
+            background: linear-gradient(180deg, #f97316, #ea580c);
+            box-shadow: 0 0 20px rgba(249, 115, 22, 0.5);
+        }
+
+        .alert-notification.medium::before {
+            background: linear-gradient(180deg, #f59e0b, #d97706);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+        }
+
+        /* Icon */
+        .alert-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 22px;
             flex-shrink: 0;
+            position: relative;
         }
 
-        .toast-content {
+        .alert-notification.critical .alert-icon {
+            background: rgba(239, 68, 68, 0.15);
+            animation: iconPulse 1.5s ease-in-out infinite;
+        }
+
+        .alert-notification.high .alert-icon {
+            background: rgba(249, 115, 22, 0.15);
+        }
+
+        .alert-notification.medium .alert-icon {
+            background: rgba(245, 158, 11, 0.15);
+        }
+
+        @keyframes iconPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        /* Content */
+        .alert-body {
             flex: 1;
             min-width: 0;
         }
 
-        .toast-title {
-            font-size: 13px;
+        .alert-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .alert-type {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .alert-notification.critical .alert-type {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+
+        .alert-notification.high .alert-type {
+            background: rgba(249, 115, 22, 0.2);
+            color: #fb923c;
+        }
+
+        .alert-notification.medium .alert-type {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+        }
+
+        .alert-truck {
+            font-size: 14px;
             font-weight: 600;
-            color: var(--danger);
+            color: var(--text);
         }
 
-        .toast-message {
-            font-size: 12px;
+        .alert-message {
+            font-size: 13px;
             color: var(--text-secondary);
-            margin-top: 2px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1.4;
+            margin-bottom: 10px;
         }
 
-        .toast-close {
-            background: none;
-            border: none;
+        .alert-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 11px;
             color: var(--text-muted);
-            font-size: 18px;
+        }
+
+        .alert-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Action button */
+        .alert-action {
+            background: rgba(14, 165, 233, 0.15);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            color: var(--accent);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
             cursor: pointer;
-            padding: 0;
-            line-height: 1;
+            transition: all 0.2s;
+        }
+
+        .alert-action:hover {
+            background: rgba(14, 165, 233, 0.25);
+            transform: translateY(-1px);
+        }
+
+        /* Close button */
+        .alert-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 24px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .alert-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+        }
+
+        /* Progress bar */
+        .alert-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+        }
+
+        .alert-progress-bar {
+            height: 100%;
+            width: 100%;
+            transform-origin: left;
+            animation: progressShrink 8s linear forwards;
+        }
+
+        .alert-notification.critical .alert-progress-bar {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+
+        .alert-notification.high .alert-progress-bar {
+            background: linear-gradient(90deg, #f97316, #fb923c);
+        }
+
+        .alert-notification.medium .alert-progress-bar {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        @keyframes progressShrink {
+            from {
+                transform: scaleX(1);
+            }
+
+            to {
+                transform: scaleX(0);
+            }
+        }
+
+        /* Stacking effect */
+        .alert-notification:nth-child(2) {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+
+        .alert-notification:nth-child(3) {
+            transform: scale(0.96);
+            opacity: 0.8;
+        }
+
+        .alert-notification:nth-child(n+4) {
+            display: none;
         }
 
         /* ══════════════════════════════════════════════════════════════════
@@ -678,8 +885,8 @@
         <p>Connecting to fleet...</p>
     </div>
 
-    <!-- Toasts -->
-    <div class="toast-container" id="toasts"></div>
+    <!-- Alert Notifications -->
+    <div class="alert-container" id="alertContainer"></div>
 
     <!-- Mobile Toggle -->
     <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
@@ -784,24 +991,80 @@
             });
         }
 
-        function showToast(title, message, id) {
-            const container = $('toasts');
-            const existing = container.querySelector(`[data-id="${id}"]`);
-            if (existing) existing.remove();
+        function showAlert(data) {
+            const container = $('alertContainer');
+            const id = data.truck_id;
+            const severity = (data.severity || 'medium').toLowerCase();
+            const alertType = data.alert_type || 'ALERT';
+            const message = data.alert_message || 'Alert triggered';
+            const temp = data.temperature_c ?? data.temperature ?? '--';
+            const action = data.action_required || 'INVESTIGATE';
 
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.dataset.id = id;
-            toast.innerHTML = `
-                <div class="toast-icon">🚨</div>
-                <div class="toast-content">
-                    <div class="toast-title">${title}</div>
-                    <div class="toast-message">${message}</div>
+            // Remove existing alert for same truck
+            const existing = container.querySelector(`[data-truck="${id}"]`);
+            if (existing) {
+                existing.classList.add('exiting');
+                setTimeout(() => existing.remove(), 400);
+            }
+
+            // Icon based on alert type
+            const icons = {
+                'TEMP_BREACH': '🌡️',
+                'DOOR_VIOLATION': '🚪',
+                'COMPRESSOR_FAULT': '❄️',
+                'SPEED_VIOLATION': '⚡',
+                'LOW_FUEL': '⛽',
+                'BATTERY_LOW': '🔋',
+                'HUMIDITY_BREACH': '💧',
+                'TIRE_PRESSURE_LOW': '🛞'
+            };
+            const icon = icons[alertType] || '🚨';
+
+            const alert = document.createElement('div');
+            alert.className = `alert-notification ${severity}`;
+            alert.dataset.truck = id;
+            alert.innerHTML = `
+                <div class="alert-icon">${icon}</div>
+                <div class="alert-body">
+                    <div class="alert-header">
+                        <span class="alert-type">${severity}</span>
+                        <span class="alert-truck">${id}</span>
+                    </div>
+                    <div class="alert-message">${message}</div>
+                    <div class="alert-meta">
+                        <span>📍 ${data.latitude?.toFixed(4) || '--'}, ${data.longitude?.toFixed(4) || '--'}</span>
+                        <button class="alert-action" onclick="focusTruck('${id}')">
+                            ${action.replace(/_/g, ' ')}
+                        </button>
+                    </div>
                 </div>
-                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+                <button class="alert-close" onclick="dismissAlert(this)">×</button>
+                <div class="alert-progress"><div class="alert-progress-bar"></div></div>
             `;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 6000);
+
+            container.insertBefore(alert, container.firstChild);
+
+            // Auto dismiss after 8s
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.classList.add('exiting');
+                    setTimeout(() => alert.remove(), 400);
+                }
+            }, 8000);
+        }
+
+        function dismissAlert(btn) {
+            const alert = btn.closest('.alert-notification');
+            alert.classList.add('exiting');
+            setTimeout(() => alert.remove(), 400);
+        }
+
+        function focusTruck(id) {
+            const m = state.markers[id];
+            if (m) {
+                map.setView(m.getLatLng(), 10);
+                m.openPopup();
+            }
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -947,7 +1210,7 @@
 
                 // Toast for alerts
                 if (isAlert) {
-                    showToast(`Alert: ${id}`, data.alert_message || data.alert_type, id);
+                    showAlert(data);
                     marker.openPopup();
                 }
 
