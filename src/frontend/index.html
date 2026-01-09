@@ -4,239 +4,210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Logistics Watchtower | Real-Time Fleet Command Center</title>
-    <meta name="description"
-        content="Real-time logistics monitoring dashboard with live fleet tracking, alerts, and analytics">
+    <title>Logistics Watchtower</title>
+    <meta name="description" content="Real-time cold chain fleet monitoring dashboard">
 
-    <!-- Google Fonts - Inter -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Leaflet CSS -->
+    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
     <style>
-        /* ═══════════════════════════════════════════════════════════════
-           DESIGN SYSTEM - CSS Custom Properties
-           ═══════════════════════════════════════════════════════════════ */
+        /* ══════════════════════════════════════════════════════════════════
+           DESIGN TOKENS
+           ══════════════════════════════════════════════════════════════════ */
         :root {
-            /* Color Palette - Dark Theme */
-            --bg-primary: #0a0f1a;
-            --bg-secondary: #111827;
-            --bg-tertiary: #1f2937;
-            --bg-glass: rgba(17, 24, 39, 0.85);
-            --bg-glass-light: rgba(31, 41, 55, 0.6);
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --border: #334155;
 
-            /* Accent Colors */
-            --accent-primary: #06b6d4;
-            --accent-secondary: #3b82f6;
-            --accent-gradient: linear-gradient(135deg, #06b6d4, #3b82f6);
-
-            /* Status Colors */
-            --status-success: #10b981;
-            --status-warning: #f59e0b;
-            --status-danger: #ef4444;
-            --status-info: #6366f1;
-
-            /* Text Colors */
-            --text-primary: #f1f5f9;
+            --text: #f8fafc;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
 
-            /* Borders & Shadows */
-            --border-subtle: rgba(148, 163, 184, 0.1);
-            --border-glow: rgba(6, 182, 212, 0.3);
-            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            --shadow-glow: 0 0 30px rgba(6, 182, 212, 0.15);
+            --accent: #0ea5e9;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
 
-            /* Spacing */
-            --sidebar-width: 340px;
-            --radius-sm: 8px;
-            --radius-md: 12px;
-            --radius-lg: 16px;
-
-            /* Transitions */
-            --transition-fast: 150ms ease;
-            --transition-normal: 300ms ease;
-            --transition-slow: 500ms ease;
+            --radius: 12px;
+            --sidebar-w: 320px;
         }
 
-        /* ═══════════════════════════════════════════════════════════════
-           BASE RESET & TYPOGRAPHY
-           ═══════════════════════════════════════════════════════════════ */
-        *,
-        *::before,
-        *::after {
+        /* ══════════════════════════════════════════════════════════════════
+           RESET & BASE
+           ══════════════════════════════════════════════════════════════════ */
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.5;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            overflow: hidden;
+            font-size: 14px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           LAYOUT
+           ══════════════════════════════════════════════════════════════════ */
+        .app {
+            display: grid;
+            grid-template-columns: var(--sidebar-w) 1fr;
+            height: 100vh;
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           SIDEBAR
+           ══════════════════════════════════════════════════════════════════ */
+        .sidebar {
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
         }
 
-        /* ═══════════════════════════════════════════════════════════════
-           MAIN LAYOUT
-           ═══════════════════════════════════════════════════════════════ */
-        .app-container {
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-        }
-
-        /* ═══════════════════════════════════════════════════════════════
-           SIDEBAR
-           ═══════════════════════════════════════════════════════════════ */
-        .sidebar {
-            width: var(--sidebar-width);
-            height: 100vh;
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-right: 1px solid var(--border-subtle);
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-            position: relative;
-        }
-
         /* Header */
-        .sidebar-header {
-            padding: 24px;
-            border-bottom: 1px solid var(--border-subtle);
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
         }
 
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .brand-icon {
-            width: 44px;
-            height: 44px;
-            background: var(--accent-gradient);
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            box-shadow: var(--shadow-glow);
-        }
-
-        .brand-text h1 {
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .brand-text span {
-            font-size: 12px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-
-        /* Connection Status */
-        .connection-status {
+        .logo {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 12px 16px;
-            background: var(--bg-glass-light);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-subtle);
+            margin-bottom: 16px;
         }
 
-        .status-indicator {
-            width: 10px;
-            height: 10px;
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            /* background: linear-gradient(135deg, var(--accent), #6366f1); */
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .logo h1 {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .logo span {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 2px;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: var(--text-muted);
-            position: relative;
         }
 
-        .status-indicator.online {
-            background: var(--status-success);
-            box-shadow: 0 0 10px var(--status-success);
+        .status-dot.online {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
             animation: pulse 2s infinite;
         }
 
-        .status-indicator.offline {
-            background: var(--status-danger);
-            box-shadow: 0 0 10px var(--status-danger);
+        .status-dot.offline {
+            background: var(--danger);
         }
 
         @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
             50% {
-                opacity: 0.7;
-                transform: scale(1.1);
+                opacity: 0.5;
             }
         }
 
-        .status-text {
-            flex: 1;
-        }
-
-        .status-text strong {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .status-text span {
-            font-size: 11px;
-            color: var(--text-muted);
-        }
-
-        .live-badge {
-            padding: 4px 10px;
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--status-success);
+        .live-tag {
+            margin-left: auto;
+            padding: 2px 8px;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
             font-size: 10px;
-            font-weight: 700;
-            border-radius: 20px;
+            font-weight: 600;
+            border-radius: 4px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            animation: liveFlash 2s infinite;
         }
 
-        @keyframes liveFlash {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.6;
-            }
+        /* Metrics */
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
         }
 
-        /* Metrics Grid */
-        .metrics-section {
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--border-subtle);
+        .metric {
+            text-align: center;
+            padding: 12px 8px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .metric.danger .metric-value {
+            color: var(--danger);
+        }
+
+        .metric.warning .metric-value {
+            color: var(--warning);
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        /* Fleet List */
+        .fleet-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 16px 20px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
         }
 
         .section-title {
@@ -244,222 +215,122 @@
             font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 16px;
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-        }
-
-        .metric-card {
-            background: var(--bg-glass-light);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            padding: 16px 12px;
-            text-align: center;
-            transition: var(--transition-normal);
-        }
-
-        .metric-card:hover {
-            border-color: var(--border-glow);
-            box-shadow: var(--shadow-glow);
-            transform: translateY(-2px);
-        }
-
-        .metric-value {
-            font-size: 28px;
-            font-weight: 700;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            line-height: 1.2;
-        }
-
-        .metric-card.danger .metric-value {
-            background: linear-gradient(135deg, #ef4444, #f97316);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .metric-card.warning .metric-value {
-            background: linear-gradient(135deg, #f59e0b, #eab308);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .metric-label {
-            font-size: 11px;
-            color: var(--text-muted);
-            text-transform: uppercase;
             letter-spacing: 0.05em;
-            margin-top: 4px;
         }
 
-        /* Trucks List */
-        .trucks-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            padding: 20px 24px;
-        }
-
-        .trucks-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .truck-count {
-            font-size: 12px;
+        .count-badge {
+            font-size: 11px;
             color: var(--text-secondary);
-            background: var(--bg-glass-light);
-            padding: 4px 10px;
-            border-radius: 20px;
+            background: var(--bg-dark);
+            padding: 4px 8px;
+            border-radius: 4px;
         }
 
-        .trucks-list {
+        .fleet-list {
             flex: 1;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            padding-right: 4px;
+            gap: 6px;
         }
 
-        .trucks-list::-webkit-scrollbar {
+        .fleet-list::-webkit-scrollbar {
             width: 4px;
         }
 
-        .trucks-list::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .trucks-list::-webkit-scrollbar-thumb {
-            background: var(--bg-tertiary);
+        .fleet-list::-webkit-scrollbar-thumb {
+            background: var(--border);
             border-radius: 4px;
         }
 
-        .truck-item {
-            display: flex;
+        /* Truck Card */
+        .truck-card {
+            display: grid;
+            grid-template-columns: 36px 1fr auto;
             align-items: center;
-            gap: 12px;
-            padding: 14px;
-            background: var(--bg-glass-light);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--bg-dark);
+            border-radius: 8px;
             cursor: pointer;
-            transition: var(--transition-normal);
+            transition: background 0.15s;
         }
 
-        .truck-item:hover {
-            border-color: var(--border-glow);
-            background: rgba(6, 182, 212, 0.05);
+        .truck-card:hover {
+            background: var(--bg-card-hover);
         }
 
-        .truck-item.alert {
-            border-color: rgba(239, 68, 68, 0.4);
-            background: rgba(239, 68, 68, 0.08);
-            animation: alertPulse 2s infinite;
-        }
-
-        @keyframes alertPulse {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2);
-            }
-
-            50% {
-                box-shadow: 0 0 15px 0 rgba(239, 68, 68, 0.3);
-            }
+        .truck-card.alert {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         .truck-icon {
             width: 36px;
             height: 36px;
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 16px;
         }
 
-        .truck-item.alert .truck-icon {
-            background: rgba(239, 68, 68, 0.2);
-        }
-
-        .truck-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .truck-name {
+        .truck-info h3 {
             font-size: 13px;
             font-weight: 600;
-            color: var(--text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .truck-meta {
+            display: flex;
+            gap: 10px;
             font-size: 11px;
             color: var(--text-muted);
-            display: flex;
-            gap: 8px;
             margin-top: 2px;
         }
 
+        .truck-meta span {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
         .truck-status {
-            padding: 4px 8px;
-            border-radius: 6px;
             font-size: 10px;
             font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
             text-transform: uppercase;
         }
 
-        .truck-status.normal {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--status-success);
+        .truck-status.ok {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
         }
 
         .truck-status.alert {
             background: rgba(239, 68, 68, 0.15);
-            color: var(--status-danger);
+            color: var(--danger);
         }
 
         /* Footer */
-        .sidebar-footer {
-            padding: 16px 24px;
-            border-top: 1px solid var(--border-subtle);
+        .footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-muted);
             text-align: center;
         }
 
-        .footer-text {
-            font-size: 11px;
-            color: var(--text-muted);
+        .footer span {
+            color: var(--accent);
         }
 
-        .footer-text span {
-            color: var(--accent-primary);
-        }
-
-        /* ═══════════════════════════════════════════════════════════════
-           MAP CONTAINER
-           ═══════════════════════════════════════════════════════════════ */
+        /* ══════════════════════════════════════════════════════════════════
+           MAP
+           ══════════════════════════════════════════════════════════════════ */
         .map-container {
-            flex: 1;
             position: relative;
-            height: 100vh;
         }
 
         #map {
@@ -467,80 +338,61 @@
             height: 100%;
         }
 
-        /* Custom Map Controls */
-        .map-overlay {
+        /* Map Controls */
+        .map-controls {
             position: absolute;
-            top: 20px;
-            right: 20px;
+            top: 16px;
+            right: 16px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             z-index: 1000;
         }
 
-        .map-control-btn {
-            width: 44px;
-            height: 44px;
-            background: var(--bg-glass);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
+        .map-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 18px;
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-primary);
-            font-size: 18px;
-            cursor: pointer;
-            transition: var(--transition-normal);
+            transition: all 0.15s;
         }
 
-        .map-control-btn:hover {
-            background: var(--bg-tertiary);
-            border-color: var(--border-glow);
-            transform: scale(1.05);
+        .map-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent);
         }
 
-        /* ═══════════════════════════════════════════════════════════════
+        /* ══════════════════════════════════════════════════════════════════
            TOAST NOTIFICATIONS
-           ═══════════════════════════════════════════════════════════════ */
+           ══════════════════════════════════════════════════════════════════ */
         .toast-container {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: 16px;
+            right: 16px;
             display: flex;
             flex-direction: column;
-            align-items: flex-end;
-            gap: 12px;
+            gap: 8px;
             z-index: 2000;
-            pointer-events: none;
+            max-width: 360px;
         }
 
         .toast {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: var(--radius-md);
-            padding: 16px 20px;
             display: flex;
-            align-items: center;
-            gap: 14px;
-            min-width: 320px;
-            max-width: 450px;
-            box-shadow: var(--shadow-lg), 0 0 30px rgba(239, 68, 68, 0.15);
-            animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-            pointer-events: auto;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .toast::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            height: 3px;
-            background: var(--status-danger);
-            animation: progress 5s linear forwards;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
         }
 
         @keyframes slideIn {
@@ -555,37 +407,14 @@
             }
         }
 
-        @keyframes slideOut {
-            from {
-                opacity: 1;
-                transform: translateX(0);
-            }
-
-            to {
-                opacity: 0;
-                transform: translateX(100px);
-            }
-        }
-
-        @keyframes progress {
-            from {
-                width: 100%;
-            }
-
-            to {
-                width: 0%;
-            }
-        }
-
         .toast-icon {
-            width: 40px;
-            height: 40px;
+            width: 32px;
+            height: 32px;
             background: rgba(239, 68, 68, 0.15);
-            border-radius: var(--radius-sm);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
             flex-shrink: 0;
         }
 
@@ -595,15 +424,15 @@
         }
 
         .toast-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
-            color: var(--status-danger);
-            margin-bottom: 2px;
+            color: var(--danger);
         }
 
         .toast-message {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
+            margin-top: 2px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -613,157 +442,174 @@
             background: none;
             border: none;
             color: var(--text-muted);
-            cursor: pointer;
-            padding: 4px;
             font-size: 18px;
-            transition: var(--transition-fast);
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
         }
 
-        .toast-close:hover {
-            color: var(--text-primary);
-        }
-
-        /* ═══════════════════════════════════════════════════════════════
-           CUSTOM LEAFLET MARKERS
-           ═══════════════════════════════════════════════════════════════ */
-        .custom-marker {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .marker-dot {
-            width: 16px;
-            height: 16px;
-            background: var(--accent-secondary);
-            border: 3px solid white;
+        /* ══════════════════════════════════════════════════════════════════
+           MAP MARKERS
+           ══════════════════════════════════════════════════════════════════ */
+        .marker {
+            width: 14px;
+            height: 14px;
+            background: var(--accent);
+            border: 2px solid white;
             border-radius: 50%;
-            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);
-            transition: var(--transition-normal);
+            box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
         }
 
-        .marker-dot.alert {
-            width: 20px;
-            height: 20px;
-            background: var(--status-danger);
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
-            animation: markerPulse 1.5s infinite;
+        .marker.alert {
+            width: 18px;
+            height: 18px;
+            background: var(--danger);
+            box-shadow: 0 0 16px var(--danger);
+            animation: alertPulse 1s infinite;
         }
 
-        @keyframes markerPulse {
-
-            0%,
-            100% {
-                transform: scale(1);
-                box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
-            }
-
+        @keyframes alertPulse {
             50% {
-                transform: scale(1.15);
-                box-shadow: 0 0 30px rgba(239, 68, 68, 0.8);
+                transform: scale(1.2);
             }
         }
 
-        /* Leaflet Popup Styling */
+        /* Leaflet Popup */
         .leaflet-popup-content-wrapper {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            box-shadow: var(--shadow-lg);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
         }
 
         .leaflet-popup-content {
-            margin: 14px 16px;
-            color: var(--text-primary);
+            margin: 12px 14px;
             font-family: 'Inter', sans-serif;
+            color: var(--text);
         }
 
         .leaflet-popup-tip {
-            background: var(--bg-glass);
-            border: 1px solid var(--border-subtle);
+            background: var(--bg-card);
         }
 
-        .popup-content {
-            min-width: 180px;
+        .popup {
+            min-width: 200px;
         }
 
         .popup-header {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 12px;
             padding-bottom: 10px;
-            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--border);
         }
 
         .popup-header .icon {
-            font-size: 20px;
+            font-size: 18px;
         }
 
         .popup-header .title {
-            font-size: 14px;
             font-weight: 600;
+            font-size: 14px;
+        }
+
+        .popup-header .severity {
+            margin-left: auto;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 3px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .severity.critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        .severity.high {
+            background: rgba(249, 115, 22, 0.2);
+            color: #f97316;
+        }
+
+        .severity.medium {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
         }
 
         .popup-alert {
-            color: var(--status-danger);
-            font-weight: 600;
-            font-size: 12px;
             background: rgba(239, 68, 68, 0.1);
-            padding: 8px 10px;
-            border-radius: var(--radius-sm);
+            color: var(--danger);
+            font-size: 11px;
+            font-weight: 500;
+            padding: 8px;
+            border-radius: 6px;
             margin-bottom: 10px;
         }
 
-        .popup-row {
+        .popup-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .popup-item {
             display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            padding: 4px 0;
+            flex-direction: column;
         }
 
-        .popup-row .label {
+        .popup-item .label {
+            font-size: 10px;
             color: var(--text-muted);
+            text-transform: uppercase;
         }
 
-        .popup-row .value {
+        .popup-item .value {
+            font-size: 13px;
             font-weight: 500;
-            color: var(--text-primary);
         }
 
-        /* Hide default Leaflet controls */
+        .popup-item .value.danger {
+            color: var(--danger);
+        }
+
+        .popup-item .value.warning {
+            color: var(--warning);
+        }
+
+        /* Hide default Leaflet zoom */
         .leaflet-control-zoom {
             display: none;
         }
 
-        /* ═══════════════════════════════════════════════════════════════
-           LOADING STATE
-           ═══════════════════════════════════════════════════════════════ */
-        .loading-overlay {
+        /* ══════════════════════════════════════════════════════════════════
+           LOADING
+           ══════════════════════════════════════════════════════════════════ */
+        .loading {
             position: fixed;
             inset: 0;
-            background: var(--bg-primary);
+            background: var(--bg-dark);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             z-index: 9999;
-            transition: opacity 0.5s ease, visibility 0.5s ease;
+            transition: opacity 0.4s;
         }
 
-        .loading-overlay.hidden {
+        .loading.hidden {
             opacity: 0;
-            visibility: hidden;
+            pointer-events: none;
         }
 
-        .loading-spinner {
-            width: 48px;
-            height: 48px;
-            border: 3px solid var(--bg-tertiary);
-            border-top-color: var(--accent-primary);
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin {
@@ -772,221 +618,180 @@
             }
         }
 
-        .loading-text {
-            margin-top: 20px;
-            font-size: 14px;
+        .loading p {
+            margin-top: 16px;
             color: var(--text-secondary);
+            font-size: 13px;
         }
 
-        /* ═══════════════════════════════════════════════════════════════
-           RESPONSIVE DESIGN
-           ═══════════════════════════════════════════════════════════════ */
+        /* ══════════════════════════════════════════════════════════════════
+           RESPONSIVE
+           ══════════════════════════════════════════════════════════════════ */
         @media (max-width: 768px) {
+            .app {
+                grid-template-columns: 1fr;
+            }
+
             .sidebar {
                 position: fixed;
-                left: -100%;
-                width: 100%;
-                max-width: 340px;
-                transition: left 0.3s ease;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                transform: translateX(-100%);
+                z-index: 1001;
+                transition: transform 0.3s;
             }
 
             .sidebar.open {
-                left: 0;
+                transform: translateX(0);
             }
 
             .mobile-toggle {
                 display: flex;
-            }
-
-            .toast-container {
-                left: 20px;
-                right: 20px;
-            }
-
-            .toast {
-                min-width: auto;
-                width: 100%;
             }
         }
 
         .mobile-toggle {
             display: none;
             position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 1001;
-            width: 48px;
-            height: 48px;
-            background: var(--bg-glass);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
+            top: 16px;
+            left: 16px;
+            z-index: 1002;
+            width: 44px;
+            height: 44px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
             align-items: center;
             justify-content: center;
-            color: var(--text-primary);
-            font-size: 24px;
+            color: var(--text);
+            font-size: 20px;
             cursor: pointer;
         }
     </style>
 </head>
 
 <body>
-    <!-- Loading Overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Initializing Fleet Command Center...</div>
+    <!-- Loading -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Connecting to fleet...</p>
     </div>
 
-    <!-- Toast Notifications Container -->
-    <div class="toast-container" id="toastContainer"></div>
+    <!-- Toasts -->
+    <div class="toast-container" id="toasts"></div>
 
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-toggle" id="mobileToggle" onclick="toggleSidebar()">☰</button>
+    <!-- Mobile Toggle -->
+    <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
 
-    <!-- Main App Container -->
-    <div class="app-container">
+    <!-- App -->
+    <div class="app">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
-            <!-- Header -->
-            <header class="sidebar-header">
-                <div class="brand">
-                    <div class="brand-icon">🚛</div>
-                    <div class="brand-text">
-                        <h1>LOGISTICS WATCHTOWER</h1>
+            <header class="header">
+                <div class="logo">
+                    <div class="logo-icon">🚛</div>
+                    <div>
+                        <h1>Watchtower</h1>
                         <span>Fleet Command Center</span>
                     </div>
                 </div>
-
-                <!-- Connection Status -->
-                <div class="connection-status">
-                    <div class="status-indicator" id="statusIndicator"></div>
-                    <div class="status-text">
-                        <strong id="statusText">Connecting...</strong>
-                        <span id="lastUpdate">Waiting for data</span>
-                    </div>
-                    <div class="live-badge" id="liveBadge" style="display: none;">LIVE</div>
+                <div class="status-badge">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                    <span class="live-tag" id="liveTag" style="display:none">Live</span>
                 </div>
             </header>
 
-            <!-- Metrics Section -->
-            <section class="metrics-section">
-                <h2 class="section-title">Fleet Metrics</h2>
-                <div class="metrics-grid">
-                    <div class="metric-card" id="activeMetric">
-                        <div class="metric-value" id="activeTrucksCount">0</div>
-                        <div class="metric-label">Active</div>
-                    </div>
-                    <div class="metric-card danger" id="alertMetric">
-                        <div class="metric-value" id="alertsCount">0</div>
-                        <div class="metric-label">Alerts</div>
-                    </div>
-                    <div class="metric-card" id="tempMetric">
-                        <div class="metric-value" id="avgTemp">--</div>
-                        <div class="metric-label">Avg °C</div>
-                    </div>
+            <div class="metrics">
+                <div class="metric">
+                    <div class="metric-value" id="metricActive">0</div>
+                    <div class="metric-label">Active</div>
                 </div>
+                <div class="metric danger">
+                    <div class="metric-value" id="metricAlerts">0</div>
+                    <div class="metric-label">Alerts</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="metricTemp">--</div>
+                    <div class="metric-label">Avg °C</div>
+                </div>
+                <div class="metric warning">
+                    <div class="metric-value" id="metricFuel">--</div>
+                    <div class="metric-label">Low Fuel</div>
+                </div>
+            </div>
+
+            <section class="fleet-section">
+                <div class="section-header">
+                    <span class="section-title">Fleet</span>
+                    <span class="count-badge" id="fleetCount">0 trucks</span>
+                </div>
+                <div class="fleet-list" id="fleetList"></div>
             </section>
 
-            <!-- Trucks List Section -->
-            <section class="trucks-section">
-                <div class="trucks-header">
-                    <h2 class="section-title">Active Units</h2>
-                    <span class="truck-count" id="truckCount">0 trucks</span>
-                </div>
-                <div class="trucks-list" id="trucksList">
-                    <!-- Truck items will be dynamically added here -->
-                </div>
-            </section>
-
-            <!-- Footer -->
-            <footer class="sidebar-footer">
-                <p class="footer-text">Streaming from <span>Redpanda</span> • Real-time Analytics</p>
+            <footer class="footer">
+                Streaming from <span>Redpanda</span> • v2.0
             </footer>
         </aside>
 
-        <!-- Map Container -->
+        <!-- Map -->
         <main class="map-container">
             <div id="map"></div>
-
-            <!-- Map Controls Overlay -->
-            <div class="map-overlay">
-                <button class="map-control-btn" onclick="zoomIn()" title="Zoom In">+</button>
-                <button class="map-control-btn" onclick="zoomOut()" title="Zoom Out">−</button>
-                <button class="map-control-btn" onclick="resetView()" title="Reset View">⌂</button>
-                <button class="map-control-btn" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+            <div class="map-controls">
+                <button class="map-btn" onclick="map.zoomIn()" title="Zoom in">+</button>
+                <button class="map-btn" onclick="map.zoomOut()" title="Zoom out">−</button>
+                <button class="map-btn" onclick="map.setView([7.5, 6], 6)" title="Reset">⌂</button>
             </div>
         </main>
     </div>
 
-    <!-- Leaflet JS -->
+    <!-- Leaflet -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // ═══════════════════════════════════════════════════════════════
-        // STATE MANAGEMENT
-        // ═══════════════════════════════════════════════════════════════
+        // ══════════════════════════════════════════════════════════════════
+        // STATE
+        // ══════════════════════════════════════════════════════════════════
         const state = {
+            trucks: {},
             markers: {},
-            truckData: {},
-            alertTrucks: new Set(),
-            temperatures: [],
-            isConnected: false
+            alerts: new Set(),
+            temps: [],
+            lowFuel: 0
         };
 
-        // ═══════════════════════════════════════════════════════════════
-        // MAP INITIALIZATION
-        // ═══════════════════════════════════════════════════════════════
-        const map = L.map('map', {
-            zoomControl: false,
-            attributionControl: false
-        }).setView([9.0820, 8.6753], 6);
+        // ══════════════════════════════════════════════════════════════════
+        // MAP
+        // ══════════════════════════════════════════════════════════════════
+        const map = L.map('map', { zoomControl: false }).setView([7.5, 6], 6);
 
-        // Dark Theme Map Tiles (CartoDB Dark Matter)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '©OpenStreetMap, ©CartoDB',
-            maxZoom: 19
+            attribution: '©OpenStreetMap ©CartoDB'
         }).addTo(map);
 
-        // Add attribution in corner
-        L.control.attribution({
-            position: 'bottomright',
-            prefix: false
-        }).addAttribution('©OpenStreetMap, ©CartoDB').addTo(map);
+        // ══════════════════════════════════════════════════════════════════
+        // HELPERS
+        // ══════════════════════════════════════════════════════════════════
+        const $ = id => document.getElementById(id);
 
-        // ═══════════════════════════════════════════════════════════════
-        // MAP CONTROLS
-        // ═══════════════════════════════════════════════════════════════
-        function zoomIn() { map.zoomIn(); }
-        function zoomOut() { map.zoomOut(); }
-        function resetView() { map.setView([9.0820, 8.6753], 6); }
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
+        function createMarkerIcon(isAlert) {
+            return L.divIcon({
+                className: '',
+                html: `<div class="marker ${isAlert ? 'alert' : ''}"></div>`,
+                iconSize: [18, 18],
+                iconAnchor: [9, 9]
+            });
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // SIDEBAR TOGGLE (Mobile)
-        // ═══════════════════════════════════════════════════════════════
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('open');
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // TOAST NOTIFICATIONS
-        // ═══════════════════════════════════════════════════════════════
-        function showToast(title, message, truckId) {
-            const container = document.getElementById('toastContainer');
-
-            // Remove existing toast for same truck
-            const existing = document.querySelector(`[data-truck="${truckId}"]`);
+        function showToast(title, message, id) {
+            const container = $('toasts');
+            const existing = container.querySelector(`[data-id="${id}"]`);
             if (existing) existing.remove();
 
             const toast = document.createElement('div');
             toast.className = 'toast';
-            toast.setAttribute('data-truck', truckId);
+            toast.dataset.id = id;
             toast.innerHTML = `
                 <div class="toast-icon">🚨</div>
                 <div class="toast-content">
@@ -995,239 +800,167 @@
                 </div>
                 <button class="toast-close" onclick="this.parentElement.remove()">×</button>
             `;
-
             container.appendChild(toast);
-
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                toast.style.animation = 'slideOut 0.3s ease forwards';
-                setTimeout(() => toast.remove(), 300);
-            }, 5000);
+            setTimeout(() => toast.remove(), 6000);
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // UI UPDATE FUNCTIONS
-        // ═══════════════════════════════════════════════════════════════
+        // ══════════════════════════════════════════════════════════════════
+        // UI UPDATES
+        // ══════════════════════════════════════════════════════════════════
         function updateMetrics() {
-            const activeTrucks = Object.keys(state.truckData).length;
-            const alertCount = state.alertTrucks.size;
-            const avgTemp = state.temperatures.length > 0
-                ? Math.round(state.temperatures.reduce((a, b) => a + b, 0) / state.temperatures.length)
+            const count = Object.keys(state.trucks).length;
+            const avgTemp = state.temps.length
+                ? Math.round(state.temps.reduce((a, b) => a + b) / state.temps.length)
                 : '--';
 
-            document.getElementById('activeTrucksCount').textContent = activeTrucks;
-            document.getElementById('alertsCount').textContent = alertCount;
-            document.getElementById('avgTemp').textContent = avgTemp;
-            document.getElementById('truckCount').textContent = `${activeTrucks} truck${activeTrucks !== 1 ? 's' : ''}`;
+            $('metricActive').textContent = count;
+            $('metricAlerts').textContent = state.alerts.size;
+            $('metricTemp').textContent = avgTemp;
+            $('metricFuel').textContent = state.lowFuel;
+            $('fleetCount').textContent = `${count} truck${count !== 1 ? 's' : ''}`;
         }
 
-        function updateTruckList(truckId, data) {
-            const list = document.getElementById('trucksList');
-            let item = document.getElementById(`truck-${truckId}`);
+        function updateTruckCard(id, data, isAlert) {
+            let card = $(`truck-${id}`);
+            const temp = data.temperature_c ?? data.temperature ?? '--';
+            const speed = data.speed_kmh ?? 0;
+            const fuel = data.fuel_level_pct ?? 100;
 
-            const isAlert = data.topic === 'alerts';
+            if (!card) {
+                card = document.createElement('div');
+                card.id = `truck-${id}`;
+                card.className = 'truck-card';
+                card.onclick = () => {
+                    const m = state.markers[id];
+                    if (m) { map.setView(m.getLatLng(), 10); m.openPopup(); }
+                };
+                $('fleetList').appendChild(card);
+            }
 
-            if (!item) {
-                item = document.createElement('div');
-                item.id = `truck-${truckId}`;
-                item.className = 'truck-item';
-                item.onclick = () => focusTruck(truckId);
-                list.appendChild(item);
-                // Initial creation structure
-                item.innerHTML = `
-                    <div class="truck-icon">🚛</div>
-                    <div class="truck-info">
-                        <div class="truck-name">${truckId}</div>
-                        <div class="truck-meta">
-                            <span class="temp"></span>
-                            <span class="rpm"></span>
-                        </div>
+            card.className = `truck-card ${isAlert ? 'alert' : ''}`;
+            card.innerHTML = `
+                <div class="truck-icon">${isAlert ? '⚠️' : '🚛'}</div>
+                <div class="truck-info">
+                    <h3>${id}</h3>
+                    <div class="truck-meta">
+                        <span>🌡️ ${typeof temp === 'number' ? temp.toFixed(1) : temp}°C</span>
+                        <span>🚗 ${speed.toFixed(0)} km/h</span>
+                        <span>⛽ ${fuel.toFixed(0)}%</span>
                     </div>
-                    <div class="truck-status">OK</div>
-                `;
-            }
+                </div>
+                <div class="truck-status ${isAlert ? 'alert' : 'ok'}">${isAlert ? 'Alert' : 'OK'}</div>
+            `;
 
-            // Update Class
-            item.className = `truck-item ${isAlert ? 'alert' : ''}`;
-
-            // Update Icon
-            const iconEl = item.querySelector('.truck-icon');
-            iconEl.textContent = isAlert ? '⚠️' : '🚛';
-
-            // Update Text Fields
-            item.querySelector('.temp').textContent = `🌡️ ${data.temperature}°C`;
-            if (data.engine_rpm) {
-                item.querySelector('.rpm').textContent = `⚙️ ${data.engine_rpm} RPM`;
-            }
-
-            // Update Status Badge
-            const statusEl = item.querySelector('.truck-status');
-            statusEl.className = `truck-status ${isAlert ? 'alert' : 'normal'}`;
-            statusEl.textContent = isAlert ? 'Alert' : 'OK';
-
-            // Sort: alerts first
-            if (isAlert && list.firstChild !== item) {
-                list.insertBefore(item, list.firstChild);
-            }
+            // Move alerts to top
+            if (isAlert) $('fleetList').prepend(card);
         }
 
-        function focusTruck(truckId) {
-            if (state.markers[truckId]) {
-                const marker = state.markers[truckId];
-                map.setView(marker.getLatLng(), 12);
-                marker.openPopup();
-            }
-        }
+        function createPopup(id, data, isAlert) {
+            const temp = data.temperature_c ?? data.temperature ?? '--';
+            const speed = data.speed_kmh ?? '--';
+            const fuel = data.fuel_level_pct ?? '--';
+            const status = (data.status ?? 'UNKNOWN').replace(/_/g, ' ');
+            const severity = data.severity ?? '';
+            const alertType = data.alert_type ?? '';
 
-        function updateConnectionStatus(online) {
-            const indicator = document.getElementById('statusIndicator');
-            const text = document.getElementById('statusText');
-            const badge = document.getElementById('liveBadge');
-
-            if (online) {
-                indicator.className = 'status-indicator online';
-                text.textContent = 'System Online';
-                badge.style.display = 'block';
-            } else {
-                indicator.className = 'status-indicator offline';
-                text.textContent = 'Disconnected';
-                badge.style.display = 'none';
-            }
-        }
-
-        function updateLastUpdate() {
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent =
-                `Last: ${now.toLocaleTimeString()}`;
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // MARKER CREATION & UPDATE
-        // ═══════════════════════════════════════════════════════════════
-        function createMarkerIcon(isAlert = false) {
-            return L.divIcon({
-                className: 'custom-marker',
-                html: `<div class="marker-dot ${isAlert ? 'alert' : ''}"></div>`,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-        }
-
-        function createPopupContent(truckId, data, isAlert) {
             return `
-                <div class="popup-content">
+                <div class="popup">
                     <div class="popup-header">
                         <span class="icon">${isAlert ? '🚨' : '🚛'}</span>
-                        <span class="title">${truckId}</span>
+                        <span class="title">${id}</span>
+                        ${severity ? `<span class="severity ${severity.toLowerCase()}">${severity}</span>` : ''}
                     </div>
-                    ${isAlert ? `<div class="popup-alert">⚠️ ${data.alert_message}</div>` : ''}
-                    <div class="popup-row">
-                        <span class="label">Temperature</span>
-                        <span class="value">${data.temperature}°C</span>
-                    </div>
-                    ${data.engine_rpm ? `
-                    <div class="popup-row">
-                        <span class="label">Engine RPM</span>
-                        <span class="value">${data.engine_rpm}</span>
-                    </div>` : ''}
-                    <div class="popup-row">
-                        <span class="label">Position</span>
-                        <span class="value">${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}</span>
-                    </div>
-                    <div class="popup-row">
-                        <span class="label">Updated</span>
-                        <span class="value">${new Date(data.timestamp).toLocaleTimeString()}</span>
+                    ${isAlert ? `<div class="popup-alert">${alertType}: ${data.alert_message || 'Alert'}</div>` : ''}
+                    <div class="popup-grid">
+                        <div class="popup-item">
+                            <span class="label">Status</span>
+                            <span class="value">${status}</span>
+                        </div>
+                        <div class="popup-item">
+                            <span class="label">Temperature</span>
+                            <span class="value ${temp > -5 ? 'danger' : ''}">${typeof temp === 'number' ? temp.toFixed(1) : temp}°C</span>
+                        </div>
+                        <div class="popup-item">
+                            <span class="label">Speed</span>
+                            <span class="value">${typeof speed === 'number' ? speed.toFixed(0) : speed} km/h</span>
+                        </div>
+                        <div class="popup-item">
+                            <span class="label">Fuel</span>
+                            <span class="value ${fuel < 15 ? 'warning' : ''}">${typeof fuel === 'number' ? fuel.toFixed(0) : fuel}%</span>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // WEBSOCKET CONNECTION
-        // ═══════════════════════════════════════════════════════════════
-        function connectWebSocket() {
-            const ws = new WebSocket("ws://localhost:8000/ws");
+        function setOnline(online) {
+            $('statusDot').className = `status-dot ${online ? 'online' : 'offline'}`;
+            $('statusText').textContent = online ? 'Connected' : 'Disconnected';
+            $('liveTag').style.display = online ? '' : 'none';
+            if (online) setTimeout(() => $('loading').classList.add('hidden'), 300);
+        }
 
-            ws.onopen = () => {
-                state.isConnected = true;
-                updateConnectionStatus(true);
+        // ══════════════════════════════════════════════════════════════════
+        // WEBSOCKET
+        // ══════════════════════════════════════════════════════════════════
+        function connect() {
+            const ws = new WebSocket('ws://localhost:8000/ws');
 
-                // Hide loading overlay
-                setTimeout(() => {
-                    document.getElementById('loadingOverlay').classList.add('hidden');
-                }, 500);
-            };
+            ws.onopen = () => setOnline(true);
+            ws.onclose = () => { setOnline(false); setTimeout(connect, 3000); };
+            ws.onerror = () => setOnline(false);
 
-            ws.onclose = () => {
-                state.isConnected = false;
-                updateConnectionStatus(false);
-
-                // Reconnect after 3 seconds
-                setTimeout(connectWebSocket, 3000);
-            };
-
-            ws.onerror = () => {
-                state.isConnected = false;
-                updateConnectionStatus(false);
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                const truckId = data.truck_id;
+            ws.onmessage = e => {
+                const data = JSON.parse(e.data);
+                const id = data.truck_id;
                 const isAlert = data.topic === 'alerts';
 
                 // Update state
-                state.truckData[truckId] = data;
+                state.trucks[id] = data;
 
-                // Track temperatures for average
-                if (data.temperature) {
-                    state.temperatures.push(data.temperature);
-                    if (state.temperatures.length > 50) state.temperatures.shift();
+                // Track temps
+                const temp = data.temperature_c ?? data.temperature;
+                if (temp !== undefined) {
+                    state.temps.push(temp);
+                    if (state.temps.length > 50) state.temps.shift();
                 }
 
                 // Track alerts
-                if (isAlert) {
-                    state.alertTrucks.add(truckId);
-                } else {
-                    state.alertTrucks.delete(truckId);
+                if (isAlert) state.alerts.add(id);
+                else state.alerts.delete(id);
+
+                // Track low fuel
+                const fuel = data.fuel_level_pct ?? 100;
+                state.lowFuel = Object.values(state.trucks).filter(t => (t.fuel_level_pct ?? 100) < 15).length;
+
+                // Marker
+                if (!state.markers[id]) {
+                    state.markers[id] = L.marker([data.latitude, data.longitude], {
+                        icon: createMarkerIcon(isAlert)
+                    }).addTo(map);
                 }
 
-                // Update or create marker
-                if (!state.markers[truckId]) {
-                    state.markers[truckId] = L.marker(
-                        [data.latitude, data.longitude],
-                        { icon: createMarkerIcon(isAlert) }
-                    ).addTo(map);
-                }
-
-                const marker = state.markers[truckId];
-
-                // Smooth position update
+                const marker = state.markers[id];
                 marker.setLatLng([data.latitude, data.longitude]);
-
-                // Update icon and popup
                 marker.setIcon(createMarkerIcon(isAlert));
-                marker.bindPopup(createPopupContent(truckId, data, isAlert));
+                marker.bindPopup(createPopup(id, data, isAlert));
 
-                // Show toast for alerts
+                // Toast for alerts
                 if (isAlert) {
-                    showToast(`Alert: ${truckId}`, data.alert_message, truckId);
+                    showToast(`Alert: ${id}`, data.alert_message || data.alert_type, id);
                     marker.openPopup();
                 }
 
-                // Update UI
-                updateTruckList(truckId, data);
+                // UI
+                updateTruckCard(id, data, isAlert);
                 updateMetrics();
-                updateLastUpdate();
             };
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // INITIALIZE APPLICATION
-        // ═══════════════════════════════════════════════════════════════
-        document.addEventListener('DOMContentLoaded', () => {
-            connectWebSocket();
-        });
+        // ══════════════════════════════════════════════════════════════════
+        // INIT
+        // ══════════════════════════════════════════════════════════════════
+        connect();
     </script>
 </body>
 

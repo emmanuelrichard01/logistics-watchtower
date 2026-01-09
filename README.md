@@ -1,131 +1,167 @@
-# **🚛 Real-Time Logistics Watchtower (Cold Chain Intelligence)**
+# 🚛 Logistics Watchtower
 
-**An event-driven streaming platform designed to detect temperature excursions in cold-chain logistics with sub-second latency.**
+**Real-time cold chain fleet monitoring with sub-second anomaly detection.**
 
-## **1️⃣ Executive Summary**
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com)
+[![Redpanda](https://img.shields.io/badge/Redpanda-Kafka%20Compatible-red.svg)](https://redpanda.com)
+[![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)](https://docker.com)
 
-Cold chain logistics fail when sensitive cargo (pharmaceuticals, perishables) exceeds safe temperature thresholds. Traditional monitoring often relies on "post-trip" data dumps, identifying spoilage only after delivery.
+---
 
-**Logistics Watchtower** enables **active intervention** by processing IoT telemetry in-flight. It ingests high-velocity sensor data, applies stateful stream processing to filter noise, and pushes critical alerts to a live command center instantly.
+## Overview
 
-**System Capabilities:**
+Cold chain logistics fail when cargo exceeds safe temperature thresholds. Traditional monitoring identifies spoilage only after delivery. **Logistics Watchtower** enables **real-time intervention** by streaming IoT telemetry through Kafka, detecting anomalies instantly, and pushing alerts to a live dashboard.
 
-* **Latency:** End-to-end processing (Sensor $\\to$ Dashboard) in \< 200ms.  
-* **Throughput:** Scalable ingestion using **Redpanda** (C++ Kafka).  
-* **Reliability:** Schema enforcement via Pydantic and containerized microservices architecture.
+| Metric | Value |
+|--------|-------|
+| **End-to-end latency** | < 200ms |
+| **Sensors per event** | 15+ data points |
+| **Alert rules** | 8 types with severity |
+| **API** | REST + WebSocket + Prometheus |
 
-## **2️⃣ System Architecture**
+---
 
-The platform implements a decoupled **Event-Driven Architecture (EDA)** where components communicate exclusively via message passing.
+## Architecture
 
-graph LR
-    %% ===== IoT Edge =====
-    subgraph IoT_Edge["IoT Edge (Simulation)"]
-        Trucks["🚚 Smart Producer"]
-    end
+```mermaid
+flowchart LR
+    P["🚚 Producer<br/>15+ sensors"] --> R[("🔴 Redpanda")]
+    R --> S["⚙️ Processor<br/>8 alert rules"]
+    S --> R
+    R --> A["🔌 API<br/>REST + WS"]
+    A --> D["🗺️ Dashboard"]
+```
 
-    %% ===== Infrastructure =====
-    subgraph Infrastructure["Streaming Infrastructure"]
-        Redpanda["🔴 Redpanda Broker"]
-    end
+---
 
-    %% ===== Processing =====
-    subgraph Processing["Processing Layer"]
-        StreamProc["⚙️ Quix Stream Processor"]
-    end
+## Features
 
-    %% ===== Serving =====
-    subgraph Serving["Serving Layer"]
-        API["🔌 FastAPI WebSocket Gateway"]
-    end
+### IoT Simulation
 
-    %% ===== UI =====
-    subgraph UI["User Interface"]
-        Map["🗺️ Live Map Dashboard"]
-    end
+| Sensor | Description |
+|--------|-------------|
+| `temperature_c` | Cargo temp (-22°C to +30°C) |
+| `humidity_pct` | Humidity (30-99%) |
+| `speed_kmh` | Speed (0-120 km/h) |
+| `fuel_level_pct` | Fuel (0-100%) |
+| `battery_voltage` | Battery (11-14.4V) |
+| `tire_pressure_psi` | Tire pressure (70-130 PSI) |
+| `door_status` | OPEN / CLOSED |
+| `cargo_weight_kg` | Cargo weight |
 
-    %% ===== Data Flow =====
-    Trucks -->|"JSON Telemetry"| Redpanda
-    Redpanda -->|"Topic: telemetry"| StreamProc
-    StreamProc -->|"Filter & Enrich"| StreamProc
-    StreamProc -->|"Topic: alerts"| Redpanda
-    Redpanda -->|"Consume (Both Topics)"| API
-    API -->|"WebSocket Push"| Map
+- Real Nigerian highway waypoints
+- Configurable fleet size via `FLEET_SIZE`
+- Built-in failure injection for testing
 
-### **Component Responsibilities**
+### Alert Rules
 
-| Component | Tech Stack | Responsibility |
-| :---- | :---- | :---- |
-| **Broker** | **Redpanda** | The central log for all events. Acts as the decoupling buffer between producers and consumers. |
-| **Stream Processor** | **Quix Streams** | Stateless filtration and transformation. Consumes raw telemetry, applies threshold logic (Temp \> \-5°C), and produces standardized alerts. |
-| **Gateway** | **FastAPI** | Bridges the streaming world (Kafka protocol) and the web world (WebSockets). Manages client connections and broadcasts events. |
-| **Producer** | **Python/Pydantic** | Generates synthetic but realistic high-frequency sensor data with schema validation. |
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| TEMP_BREACH | temp > -5°C | CRITICAL |
+| DOOR_VIOLATION | door open while moving | CRITICAL |
+| COMPRESSOR_FAULT | compressor = FAULT | CRITICAL |
+| LOW_FUEL | fuel < 15% | HIGH |
+| HUMIDITY_BREACH | humidity > 90% | HIGH |
+| SPEED_VIOLATION | speed > 100 km/h | MEDIUM |
+| BATTERY_LOW | voltage < 11.8V | MEDIUM |
 
-## **3️⃣ Engineering Decisions & Trade-offs**
+### REST API
 
-### **1\. Broker: Redpanda vs. Apache Kafka**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Health check |
+| `GET /fleet/status` | All trucks with positions |
+| `GET /trucks/{id}` | Truck details + alerts |
+| `GET /alerts/recent` | Alert history |
+| `GET /alerts/active` | Current alerts |
+| `GET /metrics` | Prometheus metrics |
+| `WS /ws` | Real-time stream |
 
-* **Decision:** Selected **Redpanda**.  
-* **Trade-off:** Redpanda is a newer entrant compared to the battle-tested JVM-based Kafka.  
-* **Justification:** For containerized microservice environments, Redpanda's **C++ architecture** (Thread-per-core model) eliminates the JVM overhead and ZooKeeper dependency. This results in significantly faster startup times and lower memory footprint for local development, while maintaining full Kafka API compatibility.
+### Dashboard
 
-### **2\. Processing: Quix Streams vs. Apache Spark/Flink**
+- Clean, minimal dark theme
+- Real-time metrics (Active, Alerts, Avg Temp, Low Fuel)
+- Fleet list with temp/speed/fuel per truck
+- Interactive map with animated markers
+- Toast notifications for alerts
 
-* **Decision:** Selected **Quix Streams** (Python).  
-* **Trade-off:** Spark/Flink offer massive horizontal scaling for petabyte-scale data but introduce immense operational complexity (Cluster management, JAR submissions).  
-* **Justification:** The logic required (filtering and thresholding) is compute-light but latency-sensitive. Quix provides a **Python-native** interface for stream processing without the context switch to Java/Scala, allowing for rapid iteration and easier maintainability for this specific use case.
+---
 
-### **3\. Transport: WebSockets vs. REST Polling**
+## Quick Start
 
-* **Decision:** Selected **WebSockets** (ws://).  
-* **Trade-off:** WebSockets require managing persistent connections and state on the server, whereas REST is stateless and easier to scale behind load balancers.  
-* **Justification:** A "Live Map" requires fluidity. REST polling (e.g., every 1s) introduces artificial latency and unnecessary network overhead (headers/handshakes). WebSockets enable an **Event-Push** model, ensuring the dashboard reflects the state of the system the millisecond an event is processed.
-
-### **4\. Simulation: Physics-Based vs. Random Generation**
-
-* **Decision:** Implemented **Linear Interpolation (Lerp)** along real highway coordinates.  
-* **Justification:** Random coordinate generation creates chaotic, unrealistic "teleportation" on maps, making it impossible to validate geospatial features. By interpolating between specific waypoints (e.g., Lagos $\\to$ Ibadan), the system produces realistic vector movement, allowing for future features like "Route Deviation Detection."
-
-## **4️⃣ Quick Start (Local Production)**
-
-The entire platform is containerized via Docker Compose.
-
-### **Prerequisites**
-
-* Docker Engine & Docker Compose
-
-### **Launch Instructions**
-
-\# 1\. Clone the repository  
-git clone \[https://github.com/emmanuelrichard01/logistics-watchtower.git\](https://github.com/emmanuelrichard01/logistics-watchtower.git)  
+```bash
+# Clone
+git clone https://github.com/emmanuelrichard01/logistics-watchtower.git
 cd logistics-watchtower
 
-\# 2\. Start the microservices fleet  
-docker-compose up \--build
+# Start (default 3 trucks)
+docker-compose up --build
 
-### **Access Points**
+# Or with custom fleet
+FLEET_SIZE=10 docker-compose up --build
+```
 
-* **Live Dashboard:** http://localhost:8000/src/frontend/index.html (or open file directly)  
-* **Redpanda Console:** http://localhost:8080 (For debugging topics/offsets)
+### Access
 
-### **Verification**
+| Service | URL |
+|---------|-----|
+| Dashboard | `src/frontend/index.html` |
+| API Docs | http://localhost:8000/docs |
+| Metrics | http://localhost:8000/metrics |
+| Redpanda Console | http://localhost:8080 |
 
-1. Open the Dashboard. You should see markers moving along Nigerian highway routes.  
-2. Watch for **TRUCK-101**. It is programmed to simulate a cooling failure (Temp $\\approx$ \-2°C) mid-route.  
-3. Observe the marker turn **RED** and trigger an alert popup instantly.
+---
 
-## **5️⃣ Directory Structure**
+## Project Structure
 
-logistics-watchtower/  
-├── docker-compose.yaml     \# Orchestration of Broker, API, and Workers  
-├── src/  
-│   ├── producer.py         \# Physics-based simulator with Pydantic validation  
-│   ├── processor.py        \# Stream processing logic (Filter/Enrich)  
-│   ├── api.py              \# Async WebSocket gateway  
-│   └── frontend/           \# Leaflet.js visualization  
-└── requirements.txt        \# Dependencies (Quix, FastAPI, Confluent-Kafka)
+```
+├── docker-compose.yaml     # Orchestration
+├── Dockerfile              # Python container
+├── requirements.txt
+└── src/
+    ├── producer.py         # IoT simulator (505 lines)
+    ├── processor.py        # Alert engine (333 lines)
+    ├── api.py              # REST + WS API (550 lines)
+    └── frontend/
+        └── index.html      # Dashboard
+```
 
-## **👤 Author**
+---
 
-Emmanuel Richard  
-Data Engineer focused on Resilient Streaming Systems
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BROKER_ADDRESS` | `localhost:9092` | Kafka broker |
+| `FLEET_SIZE` | `3` | Number of trucks |
+| `TICK_INTERVAL` | `0.5` | Telemetry interval (s) |
+
+---
+
+## Observability
+
+### Prometheus Metrics
+
+```
+logistics_messages_total
+logistics_messages_by_topic{topic="telemetry|alerts"}
+logistics_alerts_by_type{type="TEMP_BREACH|..."}
+logistics_alerts_by_severity{severity="CRITICAL|HIGH|..."}
+logistics_websocket_connections
+logistics_uptime_seconds
+```
+
+### Structured Logging
+
+```json
+{"timestamp":"...","level":"INFO","service":"logistics-api","event":"telemetry_received"}
+```
+
+---
+
+## Author
+
+**Emmanuel Richard** — Data Engineer
+
+[![GitHub](https://img.shields.io/badge/GitHub-emmanuelrichard01-black.svg)](https://github.com/emmanuelrichard01)
