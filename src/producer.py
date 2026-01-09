@@ -25,6 +25,11 @@ BROKER_ADDRESS = os.getenv("BROKER_ADDRESS", "localhost:9092")
 FLEET_SIZE = int(os.getenv("FLEET_SIZE", "3"))
 TICK_INTERVAL = float(os.getenv("TICK_INTERVAL", "0.5"))  # seconds between updates
 
+# DEMO MODE: Set to "true" for scheduled demo alerts (great for presentations!)
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in ("true", "1", "yes")
+DEMO_ALERT_DURATION = int(os.getenv("DEMO_ALERT_DURATION", "16"))   # Alert lasts 16 ticks (~8 sec)
+DEMO_COOLDOWN = int(os.getenv("DEMO_COOLDOWN", "60"))             # Wait 60 ticks (~30 sec) between alerts
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # DATA MODELS (Pydantic Schema Validation)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -211,6 +216,13 @@ class TruckSimulator:
         self.door_malfunction = False
         self.low_fuel_mode = False
         
+        # Demo mode state (time-based scheduling)
+        self.demo_alert_active = False
+        self.demo_ticks_remaining = 0
+        self.demo_cooldown_remaining = random.randint(10, 40)  # Stagger initial alerts
+        self.demo_failure_types = ["compressor", "door", "speed", "humidity"]
+        self.demo_failure_index = 0
+        
         # Timing
         self.ticks_at_stop = 0
         self.loading_ticks_remaining = 0
@@ -226,9 +238,42 @@ class TruckSimulator:
     def _inject_failures(self):
         """
         Inject realistic failure scenarios for testing.
-        TRUCK-101 gets temperature failure mid-route.
-        TRUCK-102 gets door malfunction.
+        In DEMO_MODE: Scheduled alerts with cooldowns (alert → clear → wait → repeat).
+        In normal mode: Scripted failures for TRUCK-101 and TRUCK-102.
         """
+        # ═══════════════════════════════════════════════════════════════
+        # DEMO MODE: Time-scheduled alerts with cooldowns
+        # ═══════════════════════════════════════════════════════════════
+        if DEMO_MODE:
+            # Cooldown countdown
+            self.demo_cooldown_remaining -= 1
+            
+            if self.demo_cooldown_remaining == 0:
+                # Trigger ONE alert burst
+                failure_type = self.demo_failure_types[self.demo_failure_index]
+                self.demo_failure_index = (self.demo_failure_index + 1) % len(self.demo_failure_types)
+                
+                if failure_type == "compressor":
+                    self.compressor_failing = True
+                elif failure_type == "door":
+                    self.door_malfunction = True
+                elif failure_type == "speed":
+                    self.speed_kmh = random.uniform(105, 115)
+                elif failure_type == "humidity":
+                    self.humidity = random.uniform(92, 96)
+                    
+            elif self.demo_cooldown_remaining == -1:
+                # Clear failures immediately after 1 tick
+                self.compressor_failing = False
+                self.door_malfunction = False
+                # Reset cooldown for next alert
+                self.demo_cooldown_remaining = DEMO_COOLDOWN
+                
+            return
+        
+        # ═══════════════════════════════════════════════════════════════
+        # NORMAL MODE: Scripted failures for specific trucks
+        # ═══════════════════════════════════════════════════════════════
         # Temperature failure for first truck (waypoints 3-5)
         if self.truck_id.endswith("101"):
             if 3 <= self.current_waypoint_idx <= 5:
@@ -449,6 +494,10 @@ def main():
     print(f"📡 Broker: {BROKER_ADDRESS}")
     print(f"🚚 Fleet Size: {FLEET_SIZE}")
     print(f"⏱️  Tick Interval: {TICK_INTERVAL}s")
+    if DEMO_MODE:
+        print(f"🎯 DEMO MODE: ON (alert ~{DEMO_ALERT_DURATION*0.5:.0f}s, cooldown ~{DEMO_COOLDOWN*0.5:.0f}s)")
+    else:
+        print("🎯 DEMO MODE: OFF (scripted failures only)")
     print("=" * 60)
 
     # Initialize Quix Streams

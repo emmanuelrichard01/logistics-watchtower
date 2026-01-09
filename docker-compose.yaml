@@ -48,6 +48,10 @@ services:
     environment:
       - BROKER_ADDRESS=redpanda:29092
       - PYTHONUNBUFFERED=1
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - DEMO_ALERT_DURATION=${DEMO_ALERT_DURATION:-16}
+      - DEMO_COOLDOWN=${DEMO_COOLDOWN:-60}
+      - FLEET_SIZE=${FLEET_SIZE:-3}
     depends_on:
       redpanda:
         condition: service_healthy

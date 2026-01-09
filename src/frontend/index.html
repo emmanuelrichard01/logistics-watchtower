@@ -537,6 +537,58 @@
             color: var(--text);
         }
 
+        /* Count badge for repeated alerts */
+        .alert-count {
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            background: var(--danger);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 8px;
+            animation: countPop 0.3s ease;
+        }
+
+        @keyframes countPop {
+            0% {
+                transform: scale(0.5);
+            }
+
+            50% {
+                transform: scale(1.2);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        /* Shake animation when alert updates */
+        .alert-notification.shake {
+            animation: alertShake 0.4s ease;
+        }
+
+        @keyframes alertShake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-4px);
+            }
+
+            75% {
+                transform: translateX(4px);
+            }
+        }
+
         .alert-message {
             font-size: 13px;
             color: var(--text-secondary);
@@ -965,7 +1017,9 @@
             markers: {},
             alerts: new Set(),
             temps: [],
-            lowFuel: 0
+            lowFuel: 0,
+            alertCounts: {},     // Track repeat counts per truck
+            alertTimers: {}      // Track auto-dismiss timers
         };
 
         // ══════════════════════════════════════════════════════════════════
@@ -997,15 +1051,7 @@
             const severity = (data.severity || 'medium').toLowerCase();
             const alertType = data.alert_type || 'ALERT';
             const message = data.alert_message || 'Alert triggered';
-            const temp = data.temperature_c ?? data.temperature ?? '--';
             const action = data.action_required || 'INVESTIGATE';
-
-            // Remove existing alert for same truck
-            const existing = container.querySelector(`[data-truck="${id}"]`);
-            if (existing) {
-                existing.classList.add('exiting');
-                setTimeout(() => existing.remove(), 400);
-            }
 
             // Icon based on alert type
             const icons = {
@@ -1019,6 +1065,71 @@
                 'TIRE_PRESSURE_LOW': '🛞'
             };
             const icon = icons[alertType] || '🚨';
+
+            // Check if alert already exists for this truck
+            const existing = container.querySelector(`[data-truck="${id}"]`);
+
+            if (existing) {
+                // ═══ UPDATE EXISTING ALERT ═══
+                // Increment count
+                state.alertCounts[id] = (state.alertCounts[id] || 1) + 1;
+
+                // Update count badge
+                let countBadge = existing.querySelector('.alert-count');
+                if (!countBadge) {
+                    countBadge = document.createElement('span');
+                    countBadge.className = 'alert-count';
+                    existing.querySelector('.alert-header').appendChild(countBadge);
+                }
+                countBadge.textContent = state.alertCounts[id];
+
+                // Reset animation
+                countBadge.style.animation = 'none';
+                countBadge.offsetHeight; // Trigger reflow
+                countBadge.style.animation = '';
+
+                // Update message if different
+                const msgEl = existing.querySelector('.alert-message');
+                if (msgEl.textContent !== message) {
+                    msgEl.textContent = message;
+                }
+
+                // Update location
+                const locEl = existing.querySelector('.alert-meta span');
+                locEl.textContent = `📍 ${data.latitude?.toFixed(4) || '--'}, ${data.longitude?.toFixed(4) || '--'}`;
+
+                // Shake the card
+                existing.classList.remove('shake');
+                existing.offsetHeight;
+                existing.classList.add('shake');
+
+                // Reset auto-dismiss timer
+                if (state.alertTimers[id]) {
+                    clearTimeout(state.alertTimers[id]);
+                }
+
+                // Restart progress bar animation
+                const progressBar = existing.querySelector('.alert-progress-bar');
+                progressBar.style.animation = 'none';
+                progressBar.offsetHeight;
+                progressBar.style.animation = 'progressShrink 8s linear forwards';
+
+                // Set new auto-dismiss
+                state.alertTimers[id] = setTimeout(() => {
+                    if (existing.parentNode) {
+                        existing.classList.add('exiting');
+                        setTimeout(() => {
+                            existing.remove();
+                            delete state.alertCounts[id];
+                        }, 400);
+                    }
+                }, 8000);
+
+                return;
+            }
+
+            // ═══ CREATE NEW ALERT ═══
+            state.alertCounts[id] = 1;
 
             const alert = document.createElement('div');
             alert.className = `alert-notification ${severity}`;
@@ -1038,23 +1149,31 @@
                         </button>
                     </div>
                 </div>
-                <button class="alert-close" onclick="dismissAlert(this)">×</button>
+                <button class="alert-close" onclick="dismissAlert(this, '${id}')">×</button>
                 <div class="alert-progress"><div class="alert-progress-bar"></div></div>
             `;
 
             container.insertBefore(alert, container.firstChild);
 
             // Auto dismiss after 8s
-            setTimeout(() => {
+            state.alertTimers[id] = setTimeout(() => {
                 if (alert.parentNode) {
                     alert.classList.add('exiting');
-                    setTimeout(() => alert.remove(), 400);
+                    setTimeout(() => {
+                        alert.remove();
+                        delete state.alertCounts[id];
+                    }, 400);
                 }
             }, 8000);
         }
 
-        function dismissAlert(btn) {
+        function dismissAlert(btn, id) {
             const alert = btn.closest('.alert-notification');
+            if (state.alertTimers[id]) {
+                clearTimeout(state.alertTimers[id]);
+                delete state.alertTimers[id];
+            }
+            delete state.alertCounts[id];
             alert.classList.add('exiting');
             setTimeout(() => alert.remove(), 400);
         }

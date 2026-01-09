@@ -154,7 +154,10 @@ if truck_id == "TRUCK-102" and waypoint_idx == 2:
 - Real-time metrics (Active, Alerts, Avg Temp, Low Fuel)
 - Fleet list with temp/speed/fuel per truck
 - Interactive map with animated markers
-- Toast notifications for alerts
+- FAANG-level alert notifications:
+  - Severity-colored cards with progress bars
+  - Count badges for repeated alerts
+  - Action buttons and auto-dismiss
 
 ---
 
@@ -206,6 +209,26 @@ FLEET_SIZE=10 docker-compose up --build
 | `BROKER_ADDRESS` | `localhost:9092` | Kafka broker |
 | `FLEET_SIZE` | `3` | Number of trucks |
 | `TICK_INTERVAL` | `0.5` | Telemetry interval (s) |
+| `DEMO_MODE` | `false` | Enable scheduled demo alerts |
+| `DEMO_COOLDOWN` | `60` | Ticks between demo alerts (~30s) |
+
+### Demo Mode
+
+For presentations and demos, enable `DEMO_MODE` to trigger scheduled alerts without waiting for scripted failure points:
+
+```bash
+# Standard demo (1 alert per truck every ~30s)
+DEMO_MODE=true docker-compose up --build
+
+# Faster demo (1 alert every ~15s)
+DEMO_MODE=true DEMO_COOLDOWN=30 docker-compose up --build
+```
+
+**How it works:**
+1. Each truck triggers **1 alert** (compressor → door → speed → humidity cycle)
+2. Alert clears immediately
+3. Waits `DEMO_COOLDOWN` ticks (~30s default) before next alert
+4. Trucks start staggered to avoid simultaneous alerts
 
 ---
 
