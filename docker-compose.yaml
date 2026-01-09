@@ -1,0 +1,82 @@
+services:
+  # --- INFRASTRUCTURE ---
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.10
+    container_name: redpanda
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - 8081:8081
+      - 8082:8082
+      - 9092:9092
+      - 29092:29092
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: [ "CMD-SHELL", "rpk cluster health | grep -E 'Healthy|Degraded'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.4.3
+    container_name: redpanda-console
+    ports:
+      - 8080:8080
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+    depends_on:
+      - redpanda
+
+  # --- APPLICATION MICROSERVICES ---
+
+  # 1. The Producer (Simulator)
+  producer:
+    build: .
+    container_name: logistics-producer
+    command: python src/producer.py
+    environment:
+      - BROKER_ADDRESS=redpanda:29092
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # 2. The Processor (Brain)
+  processor:
+    build: .
+    container_name: logistics-processor
+    command: python src/processor.py
+    environment:
+      - BROKER_ADDRESS=redpanda:29092
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # 3. The API (WebSocket Gateway)
+  api:
+    build: .
+    container_name: logistics-api
+    # Run uvicorn on 0.0.0.0 so it's accessible outside the container
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
+    environment:
+      - BROKER_ADDRESS=redpanda:29092
+    ports:
+      - "8000:8000"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+volumes:
+  redpanda_data:
