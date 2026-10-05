@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "watchtower-dev",
+      "credentials": [{"accessKey": "watchtower", "secretKey": "watchtower-local-only"}],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
