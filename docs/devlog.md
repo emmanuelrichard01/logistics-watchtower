@@ -2,6 +2,26 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## Week 1, day 4 work: core infrastructure (Mon 5 Oct 2026)
+
+- **MinIO is gone.** Its repository is archived (last push 24 Apr 2026), `minio/minio` no longer exists on Docker Hub, and `quay.io/minio/minio:latest` doesn't resolve. The S3 store is SeaweedFS 4.48 (Apache-2.0), named `objectstore` in Compose so it can be swapped; see ADR-0013.
+- **Architecture revision v2.1** (from the coordinator's review), applied the same day:
+  - The processor reads one ordered log, `wt.input.v1`, carrying telemetry plus control records (TICK, RULES_ACTIVATED, ASSIGNMENT_CHANGED, OPERATOR_COMMAND). Replaying that single log reproduces every output, which fixes the replay-determinism gap in the original plan (wall-clock ticks).
+  - Dropped `telemetry.clean.v1` and the compacted rules topic. Added `telemetry.minutes.v1`. Every topic is keyed by `vehicle_id`; `risk.assessments.v1` and `alerts.events.v1` move from 6 to 12 partitions so they're co-partitioned with the input log.
+  - `fleet.state.v1` is compacted with `segment.ms` = 10 minutes, so compaction actually runs at demo volumes.
+  - Vehicles use the text natural key (`TRK-101`) everywhere.
+  - Alert IDs come from the application (deterministic uuid5). The dedup key is `{vehicle}:{shipment|-}:{type}`, enforced by a CHECK, and is unique per org while live.
+  - The audit log hashes stored canonical bytes, never jsonb: Postgres normalises jsonb, so its bytes don't round-trip.
+  - `minute_series` is partitioned by UTC day. Partitions are created by a SQL function the projector will call, not by the migration, so the migration doesn't depend on the date it runs.
+  - New `packages/platform` with `make_producer`, which pins `murmur2_random` (the Java client's partitioner; librdkafka's default sends the same key elsewhere), idempotence and `acks=all`.
+- **`docker compose up --wait` fails when a one-shot init container exits, even with code 0,** unless some service depends on it with `service_completed_successfully`. The first run passed by luck of timing; the second and later runs failed intermittently. Console now waits for both init jobs, which is also the right contract: anything reading topics or buckets starts only after they exist.
+- `s3-init` wasn't idempotent: SeaweedFS errors on creating an existing bucket. It now lists first. `topics-init` reports "exists" and moves on, so `make up` is repeatable (checked three times in a row).
+- Topic auto-creation is switched off cluster-wide by `topics-init`, so a misconfigured consumer fails loudly instead of silently creating a topic (the v1 defect 17 lesson).
+- The PostGIS image installs the US TIGER geocoder and topology extensions into the database at init. Harmless noise in `\dt`; our tables are all in `public`.
+- confluent-kafka: an `AdminClient` used as a temporary gets garbage collected before its futures resolve ("Broker handle destroyed"). Keep a reference.
+- No Dockerfiles or `.sql` files yet (the DDL lives in the Alembic revision), so hadolint and sqlfluff aren't in pre-commit yet. They arrive with the first service image.
+- Integration suite: 7 tests in about 38 s locally on Testcontainers; the default `make test` deselects them.
+
 ## Week 1, day 2 work and console direction (Mon 5 Oct 2026)
 
 - v1 runtime baseline measured, 3 to 2000 trucks (`docs/audit/v1-baseline.md`). Telemetry p99 was 107 ms and alert p99 147 ms at 2000 trucks. The v1 producer, not the pipeline, is the bottleneck: it sleeps *after* each tick, so at 2000 trucks it delivers only 62% of the intended rate.

@@ -13,6 +13,7 @@ Requires [uv](https://docs.astral.sh/uv/) and GNU Make.
 ```bash
 make install   # sync the workspace, install git hooks
 make check     # lint, type check and tests: exactly what CI runs
+make up        # start the local stack (Docker), then: make migrate
 ```
 
 `make help` lists all targets.
@@ -22,6 +23,11 @@ make check     # lint, type check and tests: exactly what CI runs
 | Path | Contents |
 | --- | --- |
 | `packages/domain/` | Pure domain logic. No I/O, strict type checking |
+| `packages/contracts/` | Avro schemas and event identity |
+| `packages/platform/` | I/O adapters (Kafka producer factory with pinned settings) |
+| `infra/compose/` | Local stack: Redpanda, Schema Registry, Console, PostGIS, SeaweedFS (`make up`) |
+| `migrations/` | Alembic migrations for the Postgres schema (`make migrate`) |
+| `tests/integration/` | Container-backed tests (`make test-integration`, needs Docker) |
 | `tests/` | Test suite |
 | `docs/adr/` | Architecture decision records |
 | `docs/audit/` | v1 audit and baseline |
