@@ -2,6 +2,8 @@
 
 Solo 14-week rebuild (5 Oct 2026 to 10 Jan 2027; extended by ADR-0010). `plan/Logistics Watchtower 2.0 Rebuild Plan.md` is the source of truth for scope, phases and gates. Work happens on the `v2` branch.
 
+**Resuming work? Read `docs/handoff.md` first:** current state, work in flight, next steps and known traps. Update it at the end of each working session.
+
 ## Commands
 
 - `make install`: sync the uv workspace and install pre-commit hooks
