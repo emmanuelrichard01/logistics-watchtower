@@ -1,14 +1,13 @@
-// Simulator recordings as the console's Timeline (apps/dashboard-fixtures, README there).
-// Two recordings are time-aligned into one shift: inter-state trucks with a
-// degrading compressor, and Lagos city rounds in the morning rush. Every value is
-// synthetic. Only what a real console could know is used: readings become
-// visible when the gateway would have received them (from last_fix_age_s), and
-// probe trust is inferred from the readings, never from the simulator's
-// ground-truth fault labels.
+// The simulator's showcase recording as the console's Timeline
+// (apps/dashboard-fixtures, README there): a Thursday morning, 10 vehicles,
+// inter-state trucks and city rounds on one clock. Every value is synthetic.
+// Only what a real console could know is used: readings become visible when the
+// gateway would have received them (from last_fix_age_s), temperatures are the
+// device's probe samples (noise, calibration and faults included), and probe
+// trust is inferred from those samples, never from the ground-truth labels.
 
 import routesUrl from '../../../dashboard-fixtures/routes.geojson?url'
-import truckUrl from '../../../dashboard-fixtures/compressor_gradual_degradation.fleet.jsonl.gz?url'
-import cityUrl from '../../../dashboard-fixtures/lagos_last_mile_morning_rush.fleet.jsonl.gz?url'
+import showcaseUrl from '../../../dashboard-fixtures/console_showcase.fleet.jsonl.gz?url'
 import { cumulativeKm } from '../domain/corridors'
 import type { CargoProfile, Corridor, Station, Timeline } from '../domain/types'
 import { buildTimeline, type Truth, type VehicleSource } from './frames'
@@ -20,6 +19,9 @@ interface Row {
   vehicle_id: string
   route_id: string
   km_along: number
+  lat: number
+  lon: number
+  off_route_km: number
   speed_kmh: number
   vehicle_class: 'trailer' | 'van' | 'trike'
   cargo_profile: string
@@ -31,6 +33,11 @@ interface Row {
   cargo_c: number
   air_c: number
   supply_air_c: number
+  // What the device reported: null on probe dropout.
+  cargo_probe_c: number | null
+  return_air_probe_c: number | null
+  supply_air_probe_c: number | null
+  probe_t: string
   door: 'OPEN' | 'CLOSED'
   compressor: 'RUNNING' | 'OFF' | 'FAULT'
   defrost: boolean
@@ -109,6 +116,18 @@ function routesToCorridors(features: Feature[]): Corridor[] {
     })
 }
 
+// A probe is suspect when it stops moving while the box air around it does: a
+// real probe always carries a little noise. 16 readings is four minutes.
+const FLAT_WINDOW = 16
+function flatlined(rows: Row[], i: number): boolean {
+  if (i < FLAT_WINDOW) return false
+  const cargo = rows.slice(i - FLAT_WINDOW + 1, i + 1).map((r) => r.cargo_probe_c)
+  const air = rows.slice(i - FLAT_WINDOW + 1, i + 1).map((r) => r.return_air_probe_c)
+  if (cargo.some((c) => c === null) || air.some((a) => a === null)) return false
+  const span = (xs: (number | null)[]) => Math.max(...(xs as number[])) - Math.min(...(xs as number[]))
+  return span(cargo) < 0.005 && span(air) > 0.15
+}
+
 /** When each reading would have reached the console, from the gateway's staleness. */
 function receivedTimes(ts: number[], ages: (number | null)[]): number[] {
   const out = new Array<number>(ts.length).fill(Number.POSITIVE_INFINITY)
@@ -121,25 +140,36 @@ function receivedTimes(ts: number[], ages: (number | null)[]): number[] {
 }
 
 function toSource(rows: Row[], shiftMs: number, corridors: Map<string, Corridor>): VehicleSource {
-  const first = rows[0]
+  // A van waiting for a cross-dock starts empty: take the cargo from its first load.
+  const first = rows.find((r) => r.shipments.length > 0) ?? rows[0]
   const ts = rows.map((r) => Date.parse(r.t) + shiftMs)
   const received = receivedTimes(ts, rows.map((r) => r.last_fix_age_s))
+  // Once suspect, a probe stays suspect for this shift: a flat line that
+  // wobbles back for a moment hasn't been fixed.
+  let suspect = false
+  let loadedSince = Number.POSITIVE_INFINITY
   const truth: Truth[] = rows.map((r, i) => {
+    suspect ||= flatlined(rows, i)
+    if (r.shipments.length === 0) loadedSince = Number.POSITIVE_INFINITY
+    else if (loadedSince === Number.POSITIVE_INFINITY) loadedSince = Date.parse(r.t)
     return {
       t: ts[i],
       receivedAt: received[i],
       km: r.km_along,
+      lat: r.lat,
+      lon: r.lon,
+      offRouteKm: r.off_route_km,
       speed: r.speed_kmh,
-      cargoC: r.cargo_c,
-      returnAirC: r.air_c,
-      supplyAirC: r.supply_air_c,
+      cargoC: r.cargo_probe_c,
+      returnAirC: r.return_air_probe_c,
+      supplyAirC: r.supply_air_probe_c,
       door: r.door === 'OPEN',
       defrost: r.defrost,
       compressor: r.compressor,
-      // The recording carries true product temperature, noise-free, not probe
-      // readings; a stuck-probe rule would fire on every steady truck. Probe
-      // trust waits for probe-level data in the recording.
-      cargoProbe: 'ok',
+      cargoProbe: suspect ? 'suspect' : 'ok',
+      // A sample taken before the load measured the empty box, even if it
+      // arrives with the first loaded reading.
+      empty: r.shipments.length === 0 || Date.parse(r.probe_t) < loadedSince,
     }
   })
   const corridor = corridors.get(first.route_id)!
@@ -163,27 +193,25 @@ function toSource(rows: Row[], shiftMs: number, corridors: Map<string, Corridor>
 }
 
 export async function loadRecordingTimeline(): Promise<Timeline> {
-  const [routesText, truckText, cityText] = await Promise.all([fetchText(routesUrl), fetchText(truckUrl), fetchText(cityUrl)])
+  const [routesText, showcaseText] = await Promise.all([fetchText(routesUrl), fetchText(showcaseUrl)])
+  return timelineFromText(routesText, showcaseText)
+}
+
+/** The Timeline for a routes GeoJSON and a decompressed fleet recording. */
+export function timelineFromText(routesText: string, showcaseText: string): Timeline {
   const corridors = routesToCorridors((JSON.parse(routesText) as { features: Feature[] }).features)
   const byId = new Map(corridors.map((c) => [c.id, c]))
-  const recordings = [parseRows(truckText), parseRows(cityText)]
+  const rows = parseRows(showcaseText)
 
-  // Align every recording to the city recording's start: one shift, one clock.
-  const starts = recordings.map((rows) => Date.parse(rows[0].t))
-  const start = starts[1]
-  const steps = Math.min(...recordings.map((rows) => new Set(rows.map((r) => r.t)).size))
-  const vehicles: VehicleSource[] = []
-  recordings.forEach((rows, n) => {
-    const groups = new Map<string, Row[]>()
-    for (const r of rows) {
-      const list = groups.get(r.vehicle_id)
-      if (list) list.push(r)
-      else groups.set(r.vehicle_id, [r])
-    }
-    for (const group of [...groups.values()].sort((a, b) => a[0].vehicle_id.localeCompare(b[0].vehicle_id))) {
-      vehicles.push(toSource(group.slice(0, steps), start - starts[n], byId))
-    }
-  })
+  const start = Date.parse(rows[0].t)
+  const steps = new Set(rows.map((r) => r.t)).size
+  const groups = new Map<string, Row[]>()
+  for (const r of rows) {
+    const list = groups.get(r.vehicle_id)
+    if (list) list.push(r)
+    else groups.set(r.vehicle_id, [r])
+  }
+  const vehicles = [...groups.values()].sort((a, b) => a[0].vehicle_id.localeCompare(b[0].vehicle_id)).map((group) => toSource(group.slice(0, steps), 0, byId))
   const used = new Set(vehicles.map((v) => v.corridorId))
   return buildTimeline({
     start,

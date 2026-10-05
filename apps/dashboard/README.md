@@ -14,7 +14,7 @@ The dev server is noticeably slower on the map: React development mode, StrictMo
 
 ## Data
 
-Until the API stream exists, the console replays **simulator recordings** (`src/data/recording.ts`, fixtures in `apps/dashboard-fixtures`): inter-state trucks and Lagos city rounds on real road geometry. `?data=synthetic` switches to the **seeded synthetic timeline** (`src/data/synthetic.ts`), whose scripted scenarios are pinned by tests. Both go through one frame builder (`src/data/frames.ts`), so knowledge, risk and incidents behave the same. `src/domain/risk.ts` is a **provisional** time-to-breach estimator for UI development only; the real one is the risk engine (plan section 9).
+Until the API stream exists, the console replays the simulator's **showcase recording** (`src/data/recording.ts`, `console_showcase` in `apps/dashboard-fixtures`): 10 vehicles over a 3-hour morning, inter-state trucks and Lagos and Abuja city rounds on real road geometry. It uses only what a console could know: device probe samples (noise, calibration and faults included), readings revealed when the gateway would have received them, probe trust inferred from the samples, and no cargo while a vehicle is empty. `src/data/recording.test.ts` checks that each story beat surfaces as the right incident. `?data=synthetic` switches to the **seeded synthetic timeline** (`src/data/synthetic.ts`), whose scripted scenarios are pinned by tests. Both go through one frame builder (`src/data/frames.ts`), so knowledge, risk and incidents behave the same. `src/domain/risk.ts` is a **provisional** time-to-breach estimator for UI development only; the real one is the risk engine (plan section 9).
 
 ## Scripts
 

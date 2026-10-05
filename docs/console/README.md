@@ -4,7 +4,18 @@
 
 The console answers one question first: **which shipment will breach soonest, how sure are we, and what should I do?** It runs on desktop, tablet and phone with the same workflow (ADR-0010).
 
-By default it replays **simulator recordings** (`apps/dashboard-fixtures`): four inter-state trucks (one with a degrading compressor) and three Lagos city vehicles on multi-drop rounds, time-aligned into one shift, on real OSRM road and street geometry. Readings become visible only when the gateway would have received them, so dead zones show as estimates. `?data=synthetic` switches to the seeded synthetic fleet (14 trucks, three corridors, scripted scenarios). Everything is synthetic. Both sources feed the data contract the API stream will deliver (see [Data contract](#data-contract)).
+By default it replays the simulator's **showcase recording** (`apps/dashboard-fixtures/console_showcase`): a Thursday morning with 10 vehicles on real OSRM road and street geometry. Five inter-state trucks each carry one story, alongside a cross-dock and three city rounds in Lagos and Abuja:
+
+| Vehicle | What happens | What the console shows |
+| --- | --- | --- |
+| TRK-101 | Compressor degrades on Lagos-Abuja | Breach forecast about 33 min before the cargo crosses 8 °C |
+| TRK-102 | Compressor fault just before the Otukpo dead zone | Estimated position while offline; on reconnect, a breach dated to when it really started |
+| TRK-103 | Cargo door open at 73 km/h | Door open while moving |
+| TRK-104 | Cargo probe flatlines; the cargo itself is fine | Sensor fault, inferred from the probe going still while the air probes move |
+| TRK-105 | Hijacked: leaves the route, stops, tracker cut | Off route (recorded position, no dead reckoning), then no signal |
+| TRK-106 → VAN-ABJ2 | Cross-dock at the Abuja hub | The van carries no cargo until loaded, so its warm empty box raises nothing |
+
+The console uses only what a real one could know. Temperatures are the device's probe samples, with noise, calibration and faults included. Readings become visible when the gateway would have received them, so dead zones show as estimates. Probe trust is inferred from the samples, never from the simulator's ground truth. `src/data/recording.test.ts` checks each row of the table. `?data=synthetic` switches to the seeded synthetic fleet (14 trucks, three corridors, scripted scenarios). Everything is synthetic. Both sources feed the data contract the API stream will deliver (see [Data contract](#data-contract)).
 
 - **Code:** `apps/dashboard`
 - **Design brief:** [`docs/design/console.md`](../design/console.md)

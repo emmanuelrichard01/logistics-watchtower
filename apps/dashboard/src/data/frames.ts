@@ -13,6 +13,7 @@ import type {
   Incident,
   IncidentType,
   ProbeStatus,
+  Risk,
   SeriesPoint,
   Severity,
   Shipment,
@@ -33,7 +34,18 @@ export interface Truth {
   defrost: boolean
   compressor: VehicleState['compressor']
   cargoProbe: ProbeStatus
+  /** Recorded position and distance from the planned route, when the source has them. */
+  lat?: number
+  lon?: number
+  offRouteKm?: number
+  /** No shipment aboard (before a handover, after the last drop): the probe reads box air, not cargo. */
+  empty?: boolean
 }
+
+const EMPTY_RISK = { aspect: 'clear', ttbP10Min: null, ttbP90Min: null, confidence: 0.95, reasons: ['No cargo aboard'], expectedLossNgn: 0, ruleVersion: 0 } as const satisfies Risk
+
+/** Past this, the recorded position is shown instead of a point on the route. */
+const OFF_ROUTE_KM = 0.5
 
 export interface VehicleSource {
   vehicleId: string
@@ -63,6 +75,20 @@ const ACTIONS: Record<IncidentType, string[]> = {
   SENSOR_FAULT: ['Schedule probe check', 'Call driver to read the unit display'],
   TELEMETRY_GAP: ['Wait for coverage', 'Call driver'],
   COMPRESSOR_FAULT: ['Call driver', 'Switch to genset power', 'Divert to nearest cold store'],
+  ROUTE_DEVIATION: ['Call driver', 'Alert security partner', 'Share last position with police'],
+}
+
+/** Compass bearing of travel into reading k, from recorded positions. */
+function headingFrom(truth: Truth[], k: number): number {
+  for (let j = k - 1; j >= Math.max(0, k - 20); j--) {
+    const a = truth[j]
+    const b = truth[k]
+    if (a.lat === undefined || a.lon === undefined || b.lat === undefined || b.lon === undefined) break
+    const dx = (b.lon - a.lon) * Math.cos((b.lat * Math.PI) / 180)
+    const dy = b.lat - a.lat
+    if (Math.hypot(dx, dy) > 1e-5) return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360
+  }
+  return 0
 }
 
 export function buildTimeline(opts: {
@@ -97,8 +123,10 @@ export function buildTimeline(opts: {
       const ageS = Math.max(0, (t - known.t) / 1000)
       const estimated = ageS > ESTIMATE_AFTER_S
       // Always dead-reckon from the last fix; label it an estimate only past the threshold.
-      const km = Math.min(corridor.lengthKm, known.km + (known.speed / 3600) * ageS)
-      const pos = positionAt(corridor, km)
+      const offRoute = (known.offRouteKm ?? 0) > OFF_ROUTE_KM && known.lat !== undefined && known.lon !== undefined
+      const km = offRoute ? known.km : Math.min(corridor.lengthKm, known.km + (known.speed / 3600) * ageS)
+      // Off the route, dead reckoning along it would be a lie: hold the last recorded fix.
+      const pos = offRoute ? { lat: known.lat!, lon: known.lon!, headingDeg: headingFrom(truth, k) } : positionAt(corridor, km)
       const vehicle: VehicleState = {
         vehicleId: src.vehicleId,
         corridorId: src.corridorId,
@@ -107,7 +135,7 @@ export function buildTimeline(opts: {
         lon: pos.lon,
         speedKmh: known.speed,
         headingDeg: pos.headingDeg,
-        cargoC: known.cargoC,
+        cargoC: known.empty ? null : known.cargoC,
         returnAirC: known.returnAirC,
         supplyAirC: known.supplyAirC,
         setpointC: src.profile.setpointC,
@@ -120,7 +148,7 @@ export function buildTimeline(opts: {
       }
       const recent = truth
         .slice(Math.max(0, k - 80), k + 1)
-        .filter((p) => p.receivedAt <= t && p.cargoC !== null)
+        .filter((p) => p.receivedAt <= t && p.cargoC !== null && !p.empty)
         .map((p) => ({ tMin: (p.t - start) / 60_000, c: p.cargoC as number }))
       const remainingKm = corridor.lengthKm - km
       let lastDefrost = -1
@@ -131,7 +159,9 @@ export function buildTimeline(opts: {
         }
       }
       const minutesSinceDefrost = lastDefrost < 0 ? Number.POSITIVE_INFINITY : (known.t - truth[lastDefrost].t) / 60_000
-      const risk = assessRisk(vehicle, src.profile, recent, (remainingKm / Math.max(src.cruiseKmh * 0.6, vehicle.speedKmh)) * 60, minutesSinceDefrost)
+      const risk = known.empty
+        ? EMPTY_RISK
+        : assessRisk(vehicle, src.profile, recent, (remainingKm / Math.max(src.cruiseKmh * 0.6, vehicle.speedKmh)) * 60, minutesSinceDefrost)
       vehicles.push(vehicle)
       shipments.push({ id: src.shipmentId, vehicleId: src.vehicleId, cargo: src.profile, destination: src.destination, risk })
 
@@ -146,7 +176,7 @@ export function buildTimeline(opts: {
       const base = { vehicleId: src.vehicleId, shipmentId: src.shipmentId }
       if (risk.aspect === 'danger') {
         // Event-time start: the first reading above the limit, even if it arrived late.
-        const first = truth.findIndex((p, j) => j <= k && p.receivedAt <= t && (p.cargoC ?? -99) > src.profile.maxC)
+        const first = truth.findIndex((p, j) => j <= k && p.receivedAt <= t && !p.empty && (p.cargoC ?? -99) > src.profile.maxC)
         active.set(`${src.vehicleId}:CARGO_TEMP_BREACH`, { ...base, type: 'CARGO_TEMP_BREACH', severity: 'CRITICAL', summary: `${cargoTxt}, limit ${src.profile.maxC} °C`, since: truth[Math.max(0, first)].t })
       } else if (sev) {
         active.set(`${src.vehicleId}:BREACH_FORECAST`, { ...base, type: 'BREACH_FORECAST', severity: sev, summary: `${cargoTxt}${range}`, since: t })
@@ -160,6 +190,10 @@ export function buildTimeline(opts: {
       if (ageS > 300) {
         const zone = inDeadZone(corridor, km) ?? 'coverage gap'
         active.set(`${src.vehicleId}:TELEMETRY_GAP`, { ...base, type: 'TELEMETRY_GAP', severity: 'LOW', summary: `No signal for ${Math.round(ageS / 60)} min (${zone})`, since: known.t })
+      }
+      if (offRoute) {
+        const firstOff = truth.findLastIndex((p, j) => j <= k && (p.offRouteKm ?? 0) <= OFF_ROUTE_KM) + 1
+        active.set(`${src.vehicleId}:ROUTE_DEVIATION`, { ...base, type: 'ROUTE_DEVIATION', severity: 'HIGH', summary: `${known.offRouteKm!.toFixed(1)} km off the planned route`, since: truth[firstOff].t })
       }
       if (vehicle.compressor === 'FAULT') {
         active.set(`${src.vehicleId}:COMPRESSOR_FAULT`, { ...base, type: 'COMPRESSOR_FAULT', severity: 'CRITICAL', summary: 'Compressor fault code reported', since: t })
@@ -222,7 +256,7 @@ export function buildTimeline(opts: {
         .filter((p) => p.t >= from && p.t <= to)
         .map((p) =>
           p.receivedAt <= to
-            ? { t: p.t, cargoC: p.cargoC, returnAirC: p.returnAirC, supplyAirC: p.supplyAirC, door: p.door, defrost: p.defrost, gap: false }
+            ? { t: p.t, cargoC: p.empty ? null : p.cargoC, returnAirC: p.returnAirC, supplyAirC: p.supplyAirC, door: p.door, defrost: p.defrost, gap: false }
             : { t: p.t, cargoC: null, returnAirC: null, supplyAirC: null, door: false, defrost: false, gap: true },
         )
     },

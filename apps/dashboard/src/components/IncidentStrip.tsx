@@ -12,6 +12,7 @@ const TYPE_LABEL: Record<Incident['type'], string> = {
   SENSOR_FAULT: 'Sensor fault',
   TELEMETRY_GAP: 'No signal',
   COMPRESSOR_FAULT: 'Compressor fault',
+  ROUTE_DEVIATION: 'Off route',
 }
 
 const STATE_LABEL: Record<IncidentState, string> = {

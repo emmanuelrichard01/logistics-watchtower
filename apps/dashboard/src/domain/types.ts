@@ -98,6 +98,7 @@ export type IncidentType =
   | 'SENSOR_FAULT'
   | 'TELEMETRY_GAP'
   | 'COMPRESSOR_FAULT'
+  | 'ROUTE_DEVIATION'
 
 export interface Incident {
   id: string
