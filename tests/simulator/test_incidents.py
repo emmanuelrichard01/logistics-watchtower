@@ -2,16 +2,13 @@
 
 import json
 from datetime import datetime
-from functools import cache
 from pathlib import Path
-from typing import Any
 
-from watchtower_simulator import scenario as scenarios
 from watchtower_simulator.clock import to_ms
-from watchtower_simulator.engine import Result, Simulation
 from watchtower_simulator.environment import local_hour
 from watchtower_simulator.geo import haversine_km
 from watchtower_simulator.routes import default_data_dir, load_routes
+from watchtower_simulator.testing import rows, run
 
 ROUTES = load_routes()
 CONSOLE = json.loads(
@@ -24,15 +21,6 @@ DEPOTS: list[tuple[float, float]] = [
     for f in CONSOLE["features"]
     if f["geometry"]["type"] == "Point" and f["properties"]["depot"]
 ]
-
-
-@cache
-def run(name: str) -> Result:
-    return Simulation(scenarios.load(name)).run()
-
-
-def rows(name: str, vehicle: str) -> list[dict[str, Any]]:
-    return [r for r in run(name).recording if r["vehicle_id"] == vehicle]
 
 
 def ms(iso: str) -> int:

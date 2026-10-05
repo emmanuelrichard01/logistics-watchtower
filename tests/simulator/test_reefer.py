@@ -2,29 +2,19 @@
 
 import re
 import statistics
-from functools import cache
 from itertools import pairwise
-from typing import Any
 
 import pytest
 from watchtower_simulator import scenario as scenarios
 from watchtower_simulator.cargo import PROFILES
 from watchtower_simulator.clock import rng
-from watchtower_simulator.engine import Result, Simulation
+from watchtower_simulator.engine import Simulation
 from watchtower_simulator.reefer import Reefer, ReeferParams
 from watchtower_simulator.stops import STOP_TYPES, door_open_seconds
+from watchtower_simulator.testing import rows, run
 from watchtower_simulator.thermal import Inputs, Load, ThermalParams, ThermalState, step
 
 HOUR_MS = 3_600_000
-
-
-@cache
-def run(name: str) -> Result:
-    return Simulation(scenarios.load(name)).run()
-
-
-def rows(name: str, vehicle: str) -> list[dict[str, Any]]:
-    return [r for r in run(name).recording if r["vehicle_id"] == vehicle]
 
 
 def reefer(**params: float) -> Reefer:

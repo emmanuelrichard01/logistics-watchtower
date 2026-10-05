@@ -1,15 +1,15 @@
 """Layer 4: composable sensor and device fault injectors."""
 
 import copy
-from functools import cache
 from typing import Any
 
 import pytest
 from watchtower_simulator import scenario as scenarios
 from watchtower_simulator.clock import rng
-from watchtower_simulator.engine import Result, Simulation
+from watchtower_simulator.engine import Simulation
 from watchtower_simulator.faults import ClockSkew, make_fault
 from watchtower_simulator.geo import haversine_km
+from watchtower_simulator.testing import run
 
 HOUR = 3_600_000
 
@@ -26,11 +26,6 @@ def reading() -> dict[str, Any]:
             "hdop": 1.0,
         },
     }
-
-
-@cache
-def run(name: str) -> Result:
-    return Simulation(scenarios.load(name)).run()
 
 
 def test_offset_and_drift() -> None:

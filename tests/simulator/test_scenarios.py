@@ -4,7 +4,6 @@ and the same seed produces byte-identical output."""
 import hashlib
 import json
 from datetime import datetime
-from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +16,7 @@ from watchtower_simulator.clock import to_ms
 from watchtower_simulator.engine import Result, Simulation, iter_jsonl_ready
 from watchtower_simulator.routes import default_data_dir
 from watchtower_simulator.scenario import duration_ms
+from watchtower_simulator.testing import run
 
 NAMES = sorted(
     p.stem
@@ -24,11 +24,6 @@ NAMES = sorted(
     if not p.stem.endswith(".labels")
 )
 SCHEMA = fastavro.parse_schema(load_schema("telemetry_event"))
-
-
-@cache
-def result(name: str) -> Result:
-    return Simulation(scenarios.load(name)).run()
 
 
 def digest(r: Result) -> str:
@@ -50,7 +45,7 @@ def test_the_required_scenarios_exist() -> None:
 def test_ground_truth_labels_hold(name: str) -> None:
     labels = scenarios.load_labels(name)
     sc = scenarios.load(name)
-    truth = result(name).truth
+    truth = run(name).truth
     start = sc.start_ms
 
     def offset(iso: str) -> int:
@@ -77,7 +72,7 @@ def test_ground_truth_labels_hold(name: str) -> None:
                 for w in windows
             ), expect
 
-    readings = result(name).readings
+    readings = run(name).readings
     if labels.get("expect_duplicates"):
         assert len({r["event_id"] for r in readings}) < len(readings)
     if labels.get("expect_buffered_readings"):
@@ -89,8 +84,8 @@ def test_ground_truth_labels_hold(name: str) -> None:
 @pytest.mark.parametrize("name", NAMES)
 def test_every_reading_matches_the_avro_contract(name: str) -> None:
     # A device with a fast clock can stamp readings "in the future"; everyone else can't.
-    skewed = {t["vehicle_id"] for t in result(name).truth if t["kind"] == "fault_clock_skew"}
-    for r in result(name).readings:
+    skewed = {t["vehicle_id"] for t in run(name).truth if t["kind"] == "fault_clock_skew"}
+    for r in run(name).readings:
         assert fastavro.validate(r, SCHEMA, raise_errors=True)
         assert r["event_id"] == str(event_id(r["device_id"], r["boot_id"], r["seq"]))
         if r["vehicle_id"] not in skewed:
@@ -99,7 +94,7 @@ def test_every_reading_matches_the_avro_contract(name: str) -> None:
 
 @pytest.mark.parametrize("name", NAMES)
 def test_readings_arrive_in_gateway_order(name: str) -> None:
-    times = [r["ingest_time"] for r in result(name).readings]
+    times = [r["ingest_time"] for r in run(name).readings]
     assert times == sorted(times)
 
 

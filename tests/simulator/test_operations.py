@@ -2,13 +2,11 @@
 
 import statistics
 from datetime import UTC, datetime
-from functools import cache
 from itertools import pairwise
 from typing import Any
 
-from watchtower_simulator import scenario as scenarios
 from watchtower_simulator.clock import rng, to_ms
-from watchtower_simulator.engine import Result, Simulation
+from watchtower_simulator.engine import Result
 from watchtower_simulator.environment import local_hour
 from watchtower_simulator.operations import (
     DRIVERS,
@@ -18,18 +16,19 @@ from watchtower_simulator.operations import (
     road_features,
 )
 from watchtower_simulator.routes import load_routes
+from watchtower_simulator.testing import rows as day_rows
+from watchtower_simulator.testing import run
 
 ROUTES = load_routes()
 LAG = ROUTES["RT-LAG-ABJ"]
 
 
-@cache
 def day() -> Result:
-    return Simulation(scenarios.load("fleet_operations_day")).run()
+    return run("fleet_operations_day")
 
 
 def rows(vehicle: str) -> list[dict[str, Any]]:
-    return [r for r in day().recording if r["vehicle_id"] == vehicle]
+    return day_rows("fleet_operations_day", vehicle)
 
 
 def hour_of(row: dict[str, Any]) -> float:
