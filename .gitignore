@@ -58,6 +58,7 @@ state/
 # Impeccable working files (decision pages, catalog references); decisions live in docs/design
 .impeccable/mocks/
 .impeccable/questions/
+.impeccable/review/
 
 # Agent worktrees (Claude Code parallel tracks)
 .claude/worktrees/

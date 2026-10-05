@@ -1,0 +1,121 @@
+/* Signal Box tokens. Direction contract: .impeccable/surfaces/apps-dashboard-index-html.md */
+
+:root {
+  color-scheme: light;
+  /* Enamel (light): porcelain ground, white panels, one cobalt. */
+  --ground: #f4f5f7;
+  --surface: #ffffff;
+  --surface-sunk: #f8f9fb;
+  --ink: #0e1116;
+  --ink-2: #5b6472;
+  --ink-3: #6f7886;
+  --hairline: #e4e7ec;
+  --track: #c9ced6;
+  --hatch: #aeb5c0;
+  --cobalt: #1f4bff;
+  --cobalt-hover: #1a3fe0;
+  --cobalt-ink: #ffffff;
+  --cobalt-wash: #eef2ff;
+  --cobalt-line: rgb(31 75 255 / 0.35);
+
+  /* Lamps: aspects only, never decoration. *-ink variants carry text contrast. */
+  --danger: #d7372a;
+  --danger-ink: #b42318;
+  --danger-wash: #fdeeec;
+  --caution: #e29a00;
+  --caution-ink: #8a5a00;
+  --caution-wash: #fdf4e3;
+  --clear: #1e9e5a;
+  --clear-ink: #157046;
+  --signal-head: #15181d;
+  --lamp-off: #3a3f47;
+
+  /* Chart series (validated: dataviz validate_palette.js, light on #FFFFFF). */
+  --series-cargo: #1f4bff;
+  --series-return: #0e9f9a;
+  --series-supply: #8b5cf6;
+
+  --shadow-panel: 0 1px 2px rgb(14 17 22 / 0.04), 0 10px 28px -12px rgb(14 17 22 / 0.14);
+  --shadow-float: 0 2px 6px rgb(14 17 22 / 0.06), 0 24px 48px -16px rgb(14 17 22 / 0.24);
+  --scrim: rgb(14 17 22 / 0.18);
+
+  /* Type: Geist, 1.2 ratio, fixed rem scale (Operate mode). */
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --fs-11: 0.6875rem;
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
+  --fs-24: 1.5rem;
+  --fs-32: 2rem;
+  --fs-40: 2.5rem;
+
+  --radius-panel: 14px;
+  --radius-control: 10px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Motion: state only. One curve. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --t-press: 120ms;
+  --t-state: 200ms;
+  --t-hinge: 280ms;
+  --t-camera: 600ms;
+
+  --header-h: 64px;
+  --side-w: 384px;
+}
+
+/* Operating Centre (dark): for the control room. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ground: #0b0d10;
+  --surface: #14171c;
+  --surface-sunk: #101317;
+  --ink: #e8eaee;
+  --ink-2: #a3abb7;
+  --ink-3: #8a93a0;
+  --hairline: #232830;
+  --track: #3a414b;
+  --hatch: #4b535e;
+  --cobalt: #5b7cff;
+  --cobalt-hover: #7591ff;
+  --cobalt-ink: #0b0d10;
+  --cobalt-wash: rgb(91 124 255 / 0.14);
+  --cobalt-line: rgb(91 124 255 / 0.45);
+  --danger: #ff5a4c;
+  --danger-ink: #ff8a7f;
+  --danger-wash: rgb(255 90 76 / 0.12);
+  --caution: #f5b83d;
+  --caution-ink: #f7c768;
+  --caution-wash: rgb(245 184 61 / 0.12);
+  --clear: #36c27a;
+  --clear-ink: #5fd596;
+  --signal-head: #050608;
+  --lamp-off: #262a31;
+  /* Validated dark on #14171C; teal/violet tritan 6.4 needs direct labels (shipped). */
+  --series-cargo: #5b7cff;
+  --series-return: #1fa9a3;
+  --series-supply: #9474f2;
+  --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -16px rgb(0 0 0 / 0.6);
+  --shadow-float: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 24px 56px -20px rgb(0 0 0 / 0.8);
+  --scrim: rgb(0 0 0 / 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-press: 0ms;
+    --t-state: 0ms;
+    --t-hinge: 0ms;
+    --t-camera: 0ms;
+  }
+}
