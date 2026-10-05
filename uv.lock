@@ -7,6 +7,7 @@ members = [
     "watchtower",
     "watchtower-contracts",
     "watchtower-domain",
+    "watchtower-platform",
 ]
 
 [[package]]
@@ -618,6 +619,17 @@ source = { editable = "packages/contracts" }
 name = "watchtower-domain"
 version = "2.0.0.dev0"
 source = { editable = "packages/domain" }
+
+[[package]]
+name = "watchtower-platform"
+version = "2.0.0.dev0"
+source = { editable = "packages/platform" }
+dependencies = [
+    { name = "confluent-kafka" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "confluent-kafka", specifier = ">=2.6" }]
 
 [[package]]
 name = "wrapt"
