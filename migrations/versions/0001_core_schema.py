@@ -30,19 +30,19 @@ CREATE TABLE organizations (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- Vehicles use their natural key ('TRK-101') everywhere: topic keys, dedup keys,
+-- the API and the UI all speak it, so no surrogate UUID exists to translate.
 CREATE TABLE vehicles (
-  id          uuid PRIMARY KEY,
+  vehicle_id  text PRIMARY KEY CHECK (vehicle_id ~ '^[A-Za-z0-9._-]{1,64}$'),
   org_id      uuid NOT NULL REFERENCES organizations(id),
-  code        text NOT NULL,
   device_id   text NOT NULL UNIQUE,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (org_id, code)
+  created_at  timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE sensors (
   id                    uuid PRIMARY KEY,
   org_id                uuid NOT NULL REFERENCES organizations(id),
-  vehicle_id            uuid NOT NULL REFERENCES vehicles(id),
+  vehicle_id            text NOT NULL REFERENCES vehicles(vehicle_id),
   probe                 text NOT NULL CHECK (probe IN ('SUPPLY_AIR', 'RETURN_AIR', 'CARGO', 'AMBIENT')),
   calibration_offset_c  double precision NOT NULL DEFAULT 0,
   last_calibrated_at    timestamptz,
@@ -86,7 +86,7 @@ CREATE TABLE shipment_assignments (
   id           uuid PRIMARY KEY,
   org_id       uuid NOT NULL REFERENCES organizations(id),
   shipment_id  uuid NOT NULL REFERENCES shipments(id),
-  vehicle_id   uuid NOT NULL REFERENCES vehicles(id),
+  vehicle_id   text NOT NULL REFERENCES vehicles(vehicle_id),
   valid_from   timestamptz NOT NULL,
   valid_to     timestamptz,
   CHECK (valid_to IS NULL OR valid_to > valid_from),
@@ -95,7 +95,7 @@ CREATE TABLE shipment_assignments (
 
 -- One row per vehicle, upserted by the processor and guarded by event time.
 CREATE TABLE vehicle_state (
-  vehicle_id             uuid PRIMARY KEY REFERENCES vehicles(id),
+  vehicle_id             text PRIMARY KEY REFERENCES vehicles(vehicle_id),
   org_id                 uuid NOT NULL REFERENCES organizations(id),
   last_event_time        timestamptz NOT NULL,
   last_ingest_time       timestamptz NOT NULL,
@@ -114,7 +114,7 @@ CREATE TABLE risk_assessments (
   id                       uuid PRIMARY KEY,
   org_id                   uuid NOT NULL REFERENCES organizations(id),
   shipment_id              uuid NOT NULL REFERENCES shipments(id),
-  vehicle_id               uuid NOT NULL REFERENCES vehicles(id),
+  vehicle_id               text NOT NULL REFERENCES vehicles(vehicle_id),
   assessed_at              timestamptz NOT NULL,
   score                    double precision NOT NULL CHECK (score BETWEEN 0 AND 1),
   time_to_breach_p10_min   double precision,
@@ -132,27 +132,30 @@ CREATE TABLE risk_assessments (
 );
 CREATE INDEX risk_assessments_latest ON risk_assessments (shipment_id, assessed_at DESC);
 
+-- id is supplied by the application as a deterministic uuid5, so a reprocessed
+-- event reproduces the same alert identity. version orders projector updates.
 CREATE TABLE alerts (
   id                uuid PRIMARY KEY,
   org_id            uuid NOT NULL REFERENCES organizations(id),
   shipment_id       uuid REFERENCES shipments(id),
-  vehicle_id        uuid NOT NULL REFERENCES vehicles(id),
+  vehicle_id        text NOT NULL REFERENCES vehicles(vehicle_id),
   alert_type        text NOT NULL,
   severity          text NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
   state             text NOT NULL CHECK (state IN ('OPEN', 'ACKNOWLEDGED', 'MITIGATING', 'RESOLVED', 'AUTO_CLEARED')),
-  dedup_key         text NOT NULL,
+  dedup_key         text NOT NULL CHECK (dedup_key ~ '^[^:]+:[^:]+:[A-Z_]+$'),
   rule_version      integer NOT NULL,
   opened_at         timestamptz NOT NULL,
   last_seen_at      timestamptz NOT NULL,
   occurrence_count  integer NOT NULL DEFAULT 1 CHECK (occurrence_count >= 1),
   evidence          jsonb NOT NULL,
-  version           bigint NOT NULL DEFAULT 1,
+  version           bigint NOT NULL,
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
   CHECK (last_seen_at >= opened_at)
 );
--- One live alert per key; repeats update the row instead of inserting.
-CREATE UNIQUE INDEX alerts_one_live ON alerts (dedup_key)
+-- dedup_key is '{vehicle}:{shipment or -}:{alert type}'. One live alert per key;
+-- repeats update the row instead of inserting.
+CREATE UNIQUE INDEX alerts_one_live ON alerts (org_id, dedup_key)
   WHERE state IN ('OPEN', 'ACKNOWLEDGED', 'MITIGATING');
 
 CREATE TABLE interventions (
@@ -196,8 +199,10 @@ CREATE TABLE outbox (
 );
 CREATE INDEX outbox_unpublished ON outbox (id) WHERE published_at IS NULL;
 
--- Hash-chained and append-only, so tampering is detectable. row_hash covers
--- prev_hash and a canonical form of the row (computed by the application).
+-- Hash-chained and append-only, so tampering is detectable. The application
+-- serialises each entry once into `canonical` and stores those exact bytes;
+-- hash = sha256(prev_hash || canonical). jsonb is never hashed, because Postgres
+-- normalises it (key order, whitespace) and the bytes would not survive a round trip.
 CREATE TABLE audit_log (
   id           bigserial PRIMARY KEY,
   org_id       uuid NOT NULL REFERENCES organizations(id),
@@ -205,13 +210,54 @@ CREATE TABLE audit_log (
   action       text NOT NULL,
   entity_type  text NOT NULL,
   entity_id    text NOT NULL,
-  payload      jsonb NOT NULL,
   occurred_at  timestamptz NOT NULL DEFAULT now(),
+  canonical    bytea NOT NULL,
   prev_hash    bytea UNIQUE CHECK (octet_length(prev_hash) = 32),
-  row_hash     bytea NOT NULL UNIQUE CHECK (octet_length(row_hash) = 32)
+  hash         bytea NOT NULL UNIQUE CHECK (octet_length(hash) = 32)
 );
 -- Exactly one genesis row; with UNIQUE (prev_hash) the chain cannot fork.
 CREATE UNIQUE INDEX audit_log_one_genesis ON audit_log ((prev_hash IS NULL)) WHERE prev_hash IS NULL;
+
+-- Minute buckets for the last 72 hours, partitioned by day and dropped by
+-- partition. Values are integer hundredths, matching watchtower_domain.buckets,
+-- so sums are exact. bucket_version guards upserts: only a newer bucket applies.
+CREATE TABLE minute_series (
+  org_id          uuid NOT NULL REFERENCES organizations(id),
+  vehicle_id      text NOT NULL REFERENCES vehicles(vehicle_id),
+  minute          timestamptz NOT NULL,
+  probe           text NOT NULL,
+  sample_count    integer NOT NULL CHECK (sample_count > 0),
+  total_centi     bigint NOT NULL,
+  low_centi       integer NOT NULL,
+  high_centi      integer NOT NULL,
+  bucket_version  bigint NOT NULL,
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (vehicle_id, probe, minute),
+  CHECK (low_centi <= high_centi),
+  CHECK (minute = date_trunc('minute', minute))
+) PARTITION BY RANGE (minute);
+
+-- Day partitions are created ahead of time by the projector's maintenance task, not
+-- by this migration, so the migration stays independent of the date it runs.
+CREATE FUNCTION ensure_minute_series_partitions(first_day date, days integer)
+RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  d date;
+BEGIN
+  -- Bounds are UTC midnights. No format() placeholders: the driver would read them
+  -- as bind parameters.
+  FOR i IN 0 .. days - 1 LOOP
+    d := first_day + i;
+    EXECUTE 'CREATE TABLE IF NOT EXISTS '
+      || quote_ident('minute_series_' || to_char(d, 'YYYYMMDD'))
+      || ' PARTITION OF minute_series FOR VALUES FROM ('
+      || quote_literal(d::timestamp AT TIME ZONE 'UTC')
+      || ') TO ('
+      || quote_literal((d + 1)::timestamp AT TIME ZONE 'UTC')
+      || ')';
+  END LOOP;
+END
+$fn$;
 
 DO $$
 BEGIN
@@ -228,7 +274,8 @@ REVOKE UPDATE, DELETE, TRUNCATE ON risk_assessments, audit_log FROM watchtower_a
 """
 
 DOWNGRADE = """
-DROP TABLE audit_log, outbox, processed_events, rule_sets, interventions, alerts,
+DROP FUNCTION ensure_minute_series_partitions(date, integer);
+DROP TABLE minute_series, audit_log, outbox, processed_events, rule_sets, interventions, alerts,
   risk_assessments, vehicle_state, shipment_assignments, shipments, cargo_profiles,
   sensors, vehicles, organizations;
 DO $$

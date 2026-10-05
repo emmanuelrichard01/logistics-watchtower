@@ -11,11 +11,12 @@ from typing import Any
 
 import fastavro
 import pytest
-from confluent_kafka import Consumer, Producer
+from confluent_kafka import Consumer
 from confluent_kafka.admin import AdminClient
 from confluent_kafka.cimpl import NewTopic
 from testcontainers.community.kafka import RedpandaContainer
 from watchtower_contracts import load_schema
+from watchtower_platform import make_producer
 
 pytestmark = pytest.mark.integration
 
@@ -64,7 +65,7 @@ def test_golden_event_roundtrips_through_registry_and_broker(redpanda: RedpandaC
     admin = AdminClient({"bootstrap.servers": bootstrap})  # must outlive the future
     admin.create_topics([NewTopic(TOPIC, 3, 1)])[TOPIC].result(30)
 
-    producer = Producer({"bootstrap.servers": bootstrap, "enable.idempotence": True, "acks": "all"})
+    producer = make_producer(bootstrap)
     record = golden()
     producer.produce(
         TOPIC, key=record["vehicle_id"].encode(), value=encode(schema_id, schema, record)

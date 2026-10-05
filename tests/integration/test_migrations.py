@@ -28,8 +28,11 @@ CORE_TABLES = {
     "processed_events",
     "outbox",
     "audit_log",
+    "minute_series",
 }
 T0 = datetime(2026, 10, 5, 7, 0, tzinfo=UTC)
+# Not "{vehicle}:{shipment|-}:{type}": the shipment segment is missing.
+MISSING_SHIPMENT_FIELD = "TRK-101-CARGO_TEMP_BREACH"
 
 
 def public_tables(url: str) -> set[str]:
@@ -63,18 +66,26 @@ def test_migration_applies_to_an_empty_database_and_downgrades_cleanly(
     assert not role_exists(database_url)
 
 
-def insert(conn: Connection, table: str, **values: Any) -> uuid.UUID:
-    values.setdefault("id", uuid.uuid4())
+def insert(conn: Connection, table: str, key: str = "id", **values: Any) -> Any:
+    if key == "id":
+        values.setdefault("id", uuid.uuid4())
     columns = ", ".join(values)
     params = ", ".join(f":{name}" for name in values)
     conn.execute(text(f"INSERT INTO {table} ({columns}) VALUES ({params})"), values)
-    return values["id"]
+    return values[key]
 
 
-def seed(engine: Engine) -> dict[str, uuid.UUID]:
+def add_vehicle(conn: Connection, org: uuid.UUID, vehicle_id: str) -> str:
+    device = vehicle_id.replace("TRK", "EDGE")
+    return insert(
+        conn, "vehicles", key="vehicle_id", vehicle_id=vehicle_id, org_id=org, device_id=device
+    )
+
+
+def seed(engine: Engine) -> dict[str, Any]:
     with engine.begin() as conn:
         org = insert(conn, "organizations", name="Synthetic Cold Chain Ltd")
-        vehicle = insert(conn, "vehicles", org_id=org, code="TRK-101", device_id="EDGE-0101")
+        vehicle = add_vehicle(conn, org, "TRK-101")
         profile = insert(
             conn,
             "cargo_profiles",
@@ -99,7 +110,9 @@ def seed(engine: Engine) -> dict[str, uuid.UUID]:
     return {"org": org, "vehicle": vehicle, "shipment": shipment}
 
 
-def open_alert(conn: Connection, ids: dict[str, uuid.UUID], state: str = "OPEN") -> uuid.UUID:
+def open_alert(
+    conn: Connection, ids: dict[str, Any], state: str = "OPEN", dedup_key: str | None = None
+) -> uuid.UUID:
     return insert(
         conn,
         "alerts",
@@ -108,8 +121,9 @@ def open_alert(conn: Connection, ids: dict[str, uuid.UUID], state: str = "OPEN")
         alert_type="CARGO_TEMP_BREACH",
         severity="CRITICAL",
         state=state,
-        dedup_key=f"{ids['vehicle']}:CARGO_TEMP_BREACH",
+        dedup_key=dedup_key or f"{ids['vehicle']}:{ids['shipment']}:CARGO_TEMP_BREACH",
         rule_version=1,
+        version=1,
         opened_at=T0,
         last_seen_at=T0,
         evidence="{}",
@@ -166,7 +180,7 @@ def test_duplicate_idempotency_key_is_rejected(migrated: Engine) -> None:
 def test_a_shipment_is_on_one_truck_at_a_time(migrated: Engine) -> None:
     ids = seed(migrated)
     with migrated.begin() as conn:
-        other = insert(conn, "vehicles", org_id=ids["org"], code="TRK-102", device_id="EDGE-0102")
+        other = add_vehicle(conn, ids["org"], "TRK-102")
         insert(
             conn,
             "shipment_assignments",
@@ -220,3 +234,50 @@ def run_as_app(engine: Engine, statement: str, **params: Any) -> None:
     with engine.begin() as conn:
         conn.execute(text("SET LOCAL ROLE watchtower_app"))
         conn.execute(text(statement), params)
+
+
+def test_malformed_dedup_key_is_rejected(migrated: Engine) -> None:
+    ids = seed(migrated)
+    with pytest.raises(DBAPIError) as exc, migrated.begin() as conn:
+        open_alert(conn, ids, dedup_key=MISSING_SHIPMENT_FIELD)
+    assert sqlstate_error(exc) is errors.CheckViolation
+
+
+def test_minute_series_routes_rows_to_utc_day_partitions(migrated: Engine) -> None:
+    ids = seed(migrated)
+    row = {
+        "org_id": ids["org"],
+        "vehicle_id": ids["vehicle"],
+        "probe": "CARGO",
+        "sample_count": 2,
+        "total_centi": -3760,
+        "low_centi": -1910,
+        "high_centi": -1850,
+        "bucket_version": 1,
+    }
+    with migrated.begin() as conn:
+        for _ in range(2):  # idempotent
+            conn.execute(text("SELECT ensure_minute_series_partitions('2026-10-05', 2)"))
+        insert(
+            conn,
+            "minute_series",
+            key="minute",
+            minute=datetime(2026, 10, 5, 23, 59, tzinfo=UTC),
+            **row,
+        )
+        partition = conn.execute(
+            text("SELECT tableoid::regclass::text FROM minute_series WHERE minute = :m"),
+            {"m": datetime(2026, 10, 5, 23, 59, tzinfo=UTC)},
+        ).scalar()
+    assert partition == "minute_series_20261005"
+
+    # A day with no partition is refused, never silently stored elsewhere.
+    with pytest.raises(DBAPIError) as exc, migrated.begin() as conn:
+        insert(
+            conn,
+            "minute_series",
+            key="minute",
+            minute=datetime(2026, 10, 7, 0, 0, tzinfo=UTC),
+            **row,
+        )
+    assert sqlstate_error(exc) is errors.CheckViolation
