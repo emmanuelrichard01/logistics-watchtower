@@ -1,0 +1,28 @@
+[project]
+name = "watchtower-gateway"
+version = "2.0.0.dev0"
+description = "Ingest gateway: validates device telemetry, quarantines bad readings, produces to wt.input.v1."
+authors = [
+    { name = "emmanuelrichard01", email = "emma.moghalu@gmail.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.120",
+    "fastavro>=1.12.2",
+    "prometheus-client>=0.21",
+    "pydantic-settings>=2.6",
+    "uvicorn>=0.32",
+    "watchtower-contracts",
+    "watchtower-platform",
+]
+
+[project.scripts]
+wt-gateway = "watchtower_gateway.__main__:main"
+
+[tool.uv.sources]
+watchtower-contracts = { workspace = true }
+watchtower-platform = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
