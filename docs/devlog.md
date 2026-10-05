@@ -2,6 +2,14 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## Domain state layout and the console (Mon 5 Oct 2026)
+
+- **Domain refactored to ADR-0016.** `evaluate(view, reading)` returns a `Delta` (only the touched minute bucket, the updated sequence range and the new progress), so a state store can persist one key per bucket. Dedup is keyed by `(device_id, boot_id)`; buckets use integer epoch-minute keys; eviction follows event time, never the wall clock.
+- **Rounding surprise.** "Half-up" via `floor(x*100 + 0.5)` turns 0.285 into 28, because 0.285 is 0.28499... in binary. Quantisation now rounds the float's shortest decimal form with `Decimal` (half away from zero), and ADR-0015 is amended. A hand-picked test case caught this; the property tests didn't, because they compare the domain with itself.
+- **Console map performance.** On the reference laptop's GPU, the production build holds 59.8-59.9 fps on the map, against 0.2-47.5 fps on the Vite dev server (`apps/dashboard/scripts/perf-map.mjs`, 3 runs each). Two console bugs found by measuring rather than looking:
+  - MapLibre's worker was missing from production builds: it locates the worker with a computed URL that Vite can't see. Fixed by bundling it via `?worker&url`.
+  - A basemap layer added from a `styledata` event (which fires mid-load) silently aborted the style.
+
 ## Week 1, day 4 work: core infrastructure (Mon 5 Oct 2026)
 
 - **MinIO is gone.** Its repository is archived (last push 24 Apr 2026), `minio/minio` no longer exists on Docker Hub, and `quay.io/minio/minio:latest` doesn't resolve. The S3 store is SeaweedFS 4.48 (Apache-2.0), named `objectstore` in Compose so it can be swapped; see ADR-0013.

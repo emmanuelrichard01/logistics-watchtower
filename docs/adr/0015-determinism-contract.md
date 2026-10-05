@@ -21,7 +21,7 @@ Output IDs derived from (dedup key, transition, event-time minute) also collide 
 ## Decision Outcome
 
 - **What is compared:** the canonical encoding (sorted keys, no whitespace) of output record *values* only. Kafka timestamps, headers, the schema-ID prefix and database `created_at` are excluded.
-- **Quantised numbers:** temperatures in integer centi-°C (half-up: `floor(x * 100 + 0.5)`, never Python's banker's `round`), durations in whole seconds, confidence in basis points.
+- **Quantised numbers:** temperatures in integer centi-°C, rounded half away from zero on the float's shortest decimal form (`Decimal(str(x))` with `ROUND_HALF_UP`; never Python's banker's `round`). Amended 5 Oct 2026: the original `floor(x * 100 + 0.5)` rule gave 28 for 0.285, because 0.285 is 0.28499... in binary. Durations are whole seconds; confidence is in basis points.
 - **Sorted iteration:** every collection that reaches an output is iterated in sorted order.
 - **Output IDs:** `uuid5(ns, f"{causing_record_id}/{ordinal}")`. Every output is traceable to the record that caused it, unique, and stable under replay.
 - **Scope:** replays start from empty state at the run epoch, on the same container image digest. Matching across platforms is a stretch claim, not a promise. Mid-stream replay needs state snapshots, which are out of scope.
