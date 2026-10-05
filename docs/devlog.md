@@ -2,6 +2,14 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## The processor's core, as pure functions (Mon 5 Oct 2026)
+
+- The domain package now covers stages A-E of plan section 9 without any I/O: dedup and minute buckets, sensor trust, time-to-breach (exponential-approach baseline with a p10-p90 range), MKT and exposure, risk assessment, the alert state machine (ADR-0006) and the vehicle evaluator that composes them over one ordered input log.
+- **First lead-time number (one synthetic unit scenario, not the evaluation harness):** vaccines at 5 °C, cooling fails at t+10 min, 8 °C limit. COMPRESSOR_FAULT opens at t+10, BREACH_FORECAST at t+18, CARGO_TEMP_BREACH at t+39: **21 minutes of warning**. Source: `tests/unit/test_vehicle.py::test_forecast_warns_before_the_breach_with_a_measurable_lead_time`. Criterion 4 still needs the labelled scenario suite.
+- **Design corrections found by tests:**
+  - Escalation now runs from when an alert was *raised*, not from the condition's event-time start (an operator can't act before the alert exists), and never while the condition is recovering.
+  - A relapse check read state after resetting it, so relapses were never counted.
+
 ## Domain state layout and the console (Mon 5 Oct 2026)
 
 - **Domain refactored to ADR-0016.** `evaluate(view, reading)` returns a `Delta` (only the touched minute bucket, the updated sequence range and the new progress), so a state store can persist one key per bucket. Dedup is keyed by `(device_id, boot_id)`; buckets use integer epoch-minute keys; eviction follows event time, never the wall clock.
