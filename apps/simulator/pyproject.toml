@@ -11,11 +11,16 @@ dependencies = [
     "watchtower-contracts",
 ]
 
+[project.optional-dependencies]
+# Live mode's HTTP sink signs readings with the gateway's own reference signer.
+live = ["watchtower-gateway"]
+
 [project.scripts]
 wt-sim = "watchtower_simulator.cli:main"
 
 [tool.uv.sources]
 watchtower-contracts = { workspace = true }
+watchtower-gateway = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.12.22,<0.13.0"]

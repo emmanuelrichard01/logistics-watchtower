@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 from watchtower_simulator import fleetday
+from watchtower_simulator import live as live_mode
 from watchtower_simulator import scenario as scenarios
 from watchtower_simulator.engine import Simulation, iter_jsonl_ready
 from watchtower_simulator.scenario import duration_ms
@@ -69,6 +70,42 @@ def fleet_day(args: argparse.Namespace) -> None:
     )
 
 
+def live(args: argparse.Namespace) -> None:
+    sc = scenarios.load(args.scenario)
+    if args.duration:
+        sc = sc.with_duration(duration_ms(args.duration))
+    sink: live_mode.Sink
+    if args.sink.startswith(("http://", "https://")):
+        keys = live_mode.load_keys(Path(args.keys))
+        sc = live_mode.assign_devices(sc, keys)
+        sink = live_mode.HttpSink(args.sink, keys, batch=args.batch)
+    elif args.sink == "stdout":
+        sink = live_mode.StreamSink(sys.stdout)
+    else:
+        stream = Path(args.sink).open("w", encoding="utf-8", newline="\n")  # noqa: SIM115
+        sink = live_mode.StreamSink(stream)  # the sink owns the file and closes it
+    anchor = args.anchor or ("now" if isinstance(sink, live_mode.HttpSink) else "scenario")
+    if anchor == "now":
+        sc = live_mode.anchored(sc, args.speed, live_mode.WallClock().now_ms())
+    runner = live_mode.LiveRunner(sc, sink, speed=args.speed)
+    server = None
+    if args.control:
+        host, _, port = args.control.rpartition(":")
+        origins = frozenset(o for o in args.cors_origin if o)
+        server = live_mode.control_server(runner, host or "127.0.0.1", int(port), origins)
+        print(f"control API on http://{host or '127.0.0.1'}:{port}", file=sys.stderr)
+    print(f"{sc.name}: live at {args.speed}x -> {args.sink}", file=sys.stderr)
+    try:
+        runner.run()
+    except KeyboardInterrupt:
+        runner.stop_event.set()
+        sink.close()
+    if server is not None:
+        server.shutdown()
+    if isinstance(sink, live_mode.HttpSink):
+        print(f"{sc.name}: {sink.stats}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="wt-sim", description="Run a scenario faster than real time."
@@ -84,6 +121,34 @@ def main(argv: list[str] | None = None) -> None:
     )
     p_run.add_argument("--duration", help="override the scenario duration, e.g. 2h")
     p_run.set_defaults(func=run)
+    p_live = sub.add_parser("live", help="run a scenario paced in real time, streaming readings")
+    p_live.add_argument("scenario", help="scenario name under data/scenarios, or a YAML path")
+    p_live.add_argument("--speed", type=float, default=1.0, help="time scale: 1, 10, 60...")
+    p_live.add_argument(
+        "--sink",
+        default="stdout",
+        help="stdout, a .jsonl path, or the gateway URL (e.g. http://127.0.0.1:18090)",
+    )
+    p_live.add_argument(
+        "--keys",
+        default="infra/compose/gateway/device-keys.json",
+        help="device keys for signing (HTTP sink)",
+    )
+    p_live.add_argument("--batch", type=int, default=200, help="readings per gateway request")
+    p_live.add_argument(
+        "--anchor",
+        choices=["now", "scenario"],
+        help="now: shift the run to end at wall-clock now (default for the gateway)",
+    )
+    p_live.add_argument("--control", help="host:port for the control API, e.g. 127.0.0.1:18091")
+    p_live.add_argument(
+        "--cors-origin",
+        action="append",
+        default=["http://localhost:5173", "http://127.0.0.1:5173"],
+        help="browser origin allowed to call the control API (repeatable)",
+    )
+    p_live.add_argument("--duration", help="override the scenario duration, e.g. 2h")
+    p_live.set_defaults(func=live)
     p_day = sub.add_parser("fleet-day", help="generate a seeded fleet-day scenario and labels")
     p_day.add_argument("--seed", type=int, required=True)
     p_day.add_argument("--trucks", type=int, default=20)

@@ -905,11 +905,18 @@ dependencies = [
     { name = "watchtower-contracts" },
 ]
 
+[package.optional-dependencies]
+live = [
+    { name = "watchtower-gateway" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "watchtower-contracts", editable = "packages/contracts" },
+    { name = "watchtower-gateway", marker = "extra == 'live'", editable = "apps/gateway" },
 ]
+provides-extras = ["live"]
 
 [[package]]
 name = "wrapt"
