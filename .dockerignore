@@ -1,0 +1,10 @@
+# Allowlist: images built from the repository root see only what they need.
+# (legacy/v1 builds use legacy/v1 as their own context and are unaffected.)
+*
+!pyproject.toml
+!uv.lock
+!packages/
+!apps/gateway/
+**/__pycache__
+**/.venv
+**/*.pyc

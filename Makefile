@@ -28,8 +28,8 @@ test-integration: ## Run integration tests against throwaway containers (needs D
 
 check: lint typecheck test ## Everything CI runs on a pull request
 
-up: ## Start the core stack and wait until every service is healthy
-	$(COMPOSE) up -d --wait
+up: ## Build changed images, start the core stack and wait until every service is healthy
+	$(COMPOSE) up -d --wait --build
 
 down: ## Stop the core stack, keeping its data volumes
 	$(COMPOSE) down --remove-orphans
