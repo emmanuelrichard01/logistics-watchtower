@@ -2,6 +2,15 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## Simulator: live mode, bulk mode, validation (Mon 5 Oct 2026)
+
+- **Live mode against the real gateway.** The test runs the gateway's own FastAPI app under uvicorn with a broker that fails twice. Every signed reading is accepted after two 503 retries. Signing reuses `watchtower_gateway.validation.sign`, so the two can't drift.
+- **Time scale versus the gateway's clock.** At 60x, virtual time outruns the wall clock and the gateway would quarantine readings as FUTURE_EVENT (more than 5 minutes ahead). Live runs to the gateway shift the scenario so it ends at wall-clock now: fast runs replay recent history, never the future.
+- **Bulk mode** at 25,000 trucks: physics about 0.5M events/s, end-to-end JSON about 12k/s on one core. One dict and one uuid5 per reading dominate, so physics isn't the bottleneck. 1 Hz load tests at 25k trucks need 2-3 processes (`docs/simulator/bulk-benchmark.md`).
+- **The validation report caught two of my own mistakes before they shipped.** First, a sentence claimed box air recovered "within the first hour" without measuring it (it's 0.7 h, now computed). Second, a "sanity property" (cargo never below box air while the compressor runs) failed: right after a defrost, the air is still warmer than the cargo. That's physics; the property was mis-stated, and the report now says so explicitly. Lesson: generated reports state only what the script measures.
+- **A real bug surfaced by the showcase scenario.** Operations stops opened the cargo door at the instant the stop began, while the truck was still braking (about 20 s to drop below 5 km/h). Every checkpoint logged a 10-15 s door-open-while-moving, which a processor would raise as CRITICAL. Fixed, with a regression test.
+- The OneDrive venv corruption hit three more times (pre-commit, pytest, wt-sim shims). The Makefile now runs tools as `python -m`, which doesn't depend on the shims.
+
 ## The processor's core, as pure functions (Mon 5 Oct 2026)
 
 - The domain package now covers stages A-E of plan section 9 without any I/O: dedup and minute buckets, sensor trust, time-to-breach (exponential-approach baseline with a p10-p90 range), MKT and exposure, risk assessment, the alert state machine (ADR-0006) and the vehicle evaluator that composes them over one ordered input log.
