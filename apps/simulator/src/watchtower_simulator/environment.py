@@ -21,6 +21,7 @@ Every rate and coefficient here is illustrative, not a climatology.
 import math
 import random
 from dataclasses import dataclass
+from functools import lru_cache
 
 from watchtower_simulator.ambient import WAT_OFFSET_H, ambient_c
 from watchtower_simulator.clock import to_datetime
@@ -40,7 +41,14 @@ class Sun:
 
 
 def sun_position(t_ms: int, lat: float, lon: float) -> Sun:
-    t = to_datetime(t_ms)
+    # The sun moves ~0.25° a minute: a minute and 0.01° of resolution is plenty, and lets
+    # nearby trucks in the same tick share the calculation.
+    return _sun_position(t_ms // 60_000, round(lat, 2), round(lon, 2))
+
+
+@lru_cache(maxsize=8192)
+def _sun_position(minute: int, lat: float, lon: float) -> Sun:
+    t = to_datetime(minute * 60_000)
     hour = t.hour + t.minute / 60 + t.second / 3600
     doy = t.timetuple().tm_yday
     g = 2 * math.pi / 365 * (doy - 1 + (hour - 12) / 24)

@@ -4,6 +4,7 @@ touches the global ``random`` state, so a seed fully determines every run."""
 import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -14,6 +15,7 @@ def to_ms(moment: datetime) -> int:
     return (moment - EPOCH) // timedelta(milliseconds=1)
 
 
+@lru_cache(maxsize=4096)  # every vehicle in a tick asks for the same instant
 def to_datetime(ms: int) -> datetime:
     return EPOCH + timedelta(milliseconds=ms)
 

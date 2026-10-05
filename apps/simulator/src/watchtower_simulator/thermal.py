@@ -57,14 +57,15 @@ class Inputs:
     cargo_heat_kw: float = 0.0  # generated inside the cargo: produce respiration
 
 
-def thermostat(state: ThermalState, p: ThermalParams, i: Inputs) -> bool:
+def thermostat(air_c: float, on: bool, p: ThermalParams, i: Inputs) -> bool:
+    """Hysteresis on return air: on above setpoint + band, off below setpoint - band."""
     if i.defrost:
         return False
-    if state.air_c > i.setpoint_c + p.hysteresis_k:
+    if air_c > i.setpoint_c + p.hysteresis_k:
         return True
-    if state.air_c < i.setpoint_c - p.hysteresis_k:
+    if air_c < i.setpoint_c - p.hysteresis_k:
         return False
-    return state.compressor_on
+    return on
 
 
 def cooling_kw(state: ThermalState, p: ThermalParams, i: Inputs) -> float:
@@ -78,17 +79,20 @@ def supply_air_c(state: ThermalState, p: ThermalParams, i: Inputs) -> float:
 
 
 def step(state: ThermalState, p: ThermalParams, load: Load, i: Inputs, dt_s: float) -> ThermalState:
+    air, cargo, on = state.air_c, state.cargo_c, state.compressor_on
+    door_ua = p.door_ua_kw_per_k if i.door_open else 0.0
+    fixed_kw = (p.defrost_kw if i.defrost else 0.0) + i.extra_heat_kw
+    full_kw = p.q_max_kw * i.health * i.capacity_factor
     remaining = dt_s
     while remaining > 1e-9:
         dt = min(MAX_SUBSTEP_S, remaining)
         remaining -= dt
-        state = replace(state, compressor_on=thermostat(state, p, i))
-        q_wall = p.wall_ua_kw_per_k * (i.ambient_c - state.air_c)
-        q_cargo = load.ua_kw_per_k * (state.cargo_c - state.air_c)
-        q_door = p.door_ua_kw_per_k * (i.ambient_c - state.air_c) if i.door_open else 0.0
-        q_defrost = p.defrost_kw if i.defrost else 0.0
-        q_net = q_wall + q_cargo + q_door + q_defrost + i.extra_heat_kw - cooling_kw(state, p, i)
-        air = state.air_c + dt * q_net / p.air_capacity_kj_per_k
-        cargo = state.cargo_c + dt * (i.cargo_heat_kw - q_cargo) / load.capacity_kj_per_k
-        state = replace(state, air_c=air, cargo_c=cargo)
-    return state
+        on = thermostat(air, on, p, i)
+        q_cargo = load.ua_kw_per_k * (cargo - air)
+        q_out = (p.wall_ua_kw_per_k + door_ua) * (i.ambient_c - air)
+        q_net = q_out + q_cargo + fixed_kw - (full_kw if on else 0.0)
+        air, cargo = (
+            air + dt * q_net / p.air_capacity_kj_per_k,
+            cargo + dt * (i.cargo_heat_kw - q_cargo) / load.capacity_kj_per_k,
+        )
+    return replace(state, air_c=air, cargo_c=cargo, compressor_on=on)

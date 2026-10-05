@@ -13,7 +13,6 @@ reporting interval in use (so a 1 Hz load test steps at 1 s). Each ``tick``:
 on a paced clock.
 """
 
-import copy
 import math
 import random
 from collections.abc import Iterator
@@ -113,6 +112,15 @@ class VehicleSim:
     cond: Conditions | None = None  # this tick's environment
     operations: Operations | None = None
     open_truth: dict[str, int] = field(default_factory=lambda: {})
+
+    _pos_km: float = field(default=-1.0, repr=False)
+    _pos: tuple[float, float, float] = field(default=(0.0, 0.0, 0.0), repr=False)
+
+    def position(self) -> tuple[float, float, float]:
+        """(lat, lon, heading) at the current km, computed once per move."""
+        if self.km != self._pos_km:
+            self._pos, self._pos_km = self.route.position(self.km), self.km
+        return self._pos
 
     def moving(self) -> bool:
         return self.speed_kmh > 5.0
@@ -320,7 +328,7 @@ class Simulation:
         return not (v.reefer.power_source == "GENSET" and v.reefer.genset_l <= 0.0)
 
     def environment(self, v: VehicleSim, now: int) -> Conditions:
-        lat, lon, heading = v.route.position(v.km)
+        lat, lon, heading = v.position()
         v.cond = conditions(
             v.weather, now, lat, lon, heading, v.speed_kmh, v.params.wall_ua_kw_per_k
         )
@@ -350,7 +358,7 @@ class Simulation:
     def observe(self, v: VehicleSim, now: int, *, record: bool) -> list[tuple[Delivery, str]]:
         if v.health_ramp is not None:
             v.health = v.health_ramp.value(now)
-        lat, lon, heading = v.route.position(v.km)
+        lat, lon, heading = v.position()
         c = self.environment(v, now)
         segment = v.route.segment(v.km)
         zone = v.route.dead_zone(v.km) if self.scenario.named_dead_zones else None
@@ -394,7 +402,7 @@ class Simulation:
 
     def advance(self, v: VehicleSim, now: int) -> None:
         dt_s = self.step_ms / 1000
-        lat, _, _ = v.route.position(v.km)
+        lat, _, _ = v.position()
 
         if v.km >= v.route.length_km and not v.stopped(now):
             # Arrived: park with the engine off until the run ends.
@@ -586,8 +594,9 @@ class Simulation:
 
     @staticmethod
     def materialise(d: Delivery) -> dict[str, Any]:
-        record = copy.deepcopy(d.reading)
-        record["ingest_time"] = to_datetime(d.ingest_ms)
+        # Shallow on purpose: a reading is final once delivered, and retransmitted copies
+        # differ only in ingest_time, so the nested sections can be shared read-only.
+        record = {**d.reading, "ingest_time": to_datetime(d.ingest_ms)}
         order = [
             "event_id",
             "schema_version",
