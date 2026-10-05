@@ -976,6 +976,9 @@ kbd {
 .map-view__canvas {
   width: 100%;
   height: 100%;
+  /* Keep the map's own layers (deck.gl canvas, labels, tooltips) inside one
+     stacking context, below the floating panels that follow it. */
+  isolation: isolate;
 }
 .map-loading {
   display: grid;

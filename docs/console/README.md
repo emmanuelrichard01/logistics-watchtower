@@ -1,6 +1,8 @@
 # The Operator Console
 
-![Lanes board, light theme](../media/lanes-light.png)
+![The lanes board: open a breaching truck's evidence, replay the morning, return to live](../media/tour-lanes.gif)
+
+<sub>Rendered frame by frame from the production build (`apps/dashboard/scripts/media.mjs`). Full quality: [MP4](../media/tour-lanes.mp4).</sub>
 
 The console answers one question first: **which shipment will breach soonest, how sure are we, and what should I do?** It runs on desktop, tablet and phone with the same workflow (ADR-0010).
 
@@ -93,22 +95,28 @@ The chart plots minute means, the same buckets the processor keeps. Raw 15-secon
 
 ### Map
 
-MapLibre draws the basemap, and deck.gl draws vehicles in their own canvas.
+MapLibre draws the basemap, routes and stops; deck.gl draws only what moves, in its own canvas, with a single shader program (see [Performance](#performance)).
 
 - **Basemap:** OpenFreeMap's Positron style, recoloured at load time to the theme's tokens, so light and dark both belong to the product (`views/map/basemap.ts`).
 - **Vehicles:** glide between timeline steps and point along their heading.
 - **Selected truck:** its route ahead lights cobalt and its last hour fades behind it. Follow mode tracks it bearing-up.
-- **3D:** pitches the camera, extrudes buildings and raises "signal posts" over at-risk trucks.
+- **3D:** pitches the camera, extrudes buildings and raises signal masts over at-risk trucks. Each mast carries the console's signal head, so the lamp position, not only its colour, gives the aspect.
+- **Off route:** a vehicle that leaves its planned route is drawn at its recorded position, never dead-reckoned along a road it isn't on, and raises an Off route incident.
+- **City rounds:** urban routes show their customer drops with delivery windows (hover for details).
 - **Trip card:** ETA, remaining distance, next stop and route progress with its dead zones.
 - **Legend:** a compact chip explains the map's symbols.
 
-![Map with a truck selected](../media/map-light.png)
+![The map story: the breaching truck selected, 3D signal masts, a Lagos city round](../media/tour-map.gif)
+
+| 3D, dark theme | A Lagos city round |
+| --- | --- |
+| ![3D map with signal masts](../media/map-3d.png) | ![A van at street level with its drops](../media/map-city.png) |
 
 ### Incidents
 
 A lifecycle board (Open, Acknowledged, Mitigating, Resolved), triaged from the keyboard: <kbd>J</kbd>/<kbd>K</kbd> to move, <kbd>A</kbd> acknowledge, <kbd>M</kbd> mitigate, <kbd>R</kbd> resolve, <kbd>Enter</kbd> open. Actions update optimistically and can be undone, and they're disabled during replay.
 
-![Incidents board](../media/incidents-light.png)
+![Incident workflow from the keyboard](../media/tour-incidents.gif)
 
 ### Health
 
@@ -199,4 +207,4 @@ make console-dev   # hot reload at http://localhost:5173
 make console-check # lint, types, tests, build (CI runs the same)
 ```
 
-Media for these docs comes from `apps/dashboard/scripts/media.mjs`.
+Media for these docs comes from `apps/dashboard/scripts/media.mjs`. Screenshots are taken at 2x (3x on the phone). The clips are rendered frame by frame on Playwright's fake clock rather than screen-recorded: requestAnimationFrame, timers and `performance.now` advance exactly 1/30 s per captured frame, so the video is smooth at 30 fps however slow the machine is. A real-time CDP screencast managed about 10 fps on the lanes and 1.5 fps on the WebGL map of the reference laptop. CSS animations run on the compositor's clock, so their playback rate is matched to the capture rate. Captions sit in a bar under the frame, leaving the product image untouched.

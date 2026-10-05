@@ -2,6 +2,17 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## Showcase data in the console, and footage that isn't screen-recorded (Mon 5 Oct 2026)
+
+- The console now replays the simulator's `console_showcase` morning: 10 vehicles on one clock. It reads the **device-reported** probe values instead of noise-free truth. So the stuck-probe rule, disabled on noise-free data, works again: TRK-104's flatline is inferred from the samples alone.
+- Listing every incident the console raised found two false breaches. Both came from **empty boxes**: a van waiting for a cross-dock, and a trike after its last drop. The probe reads warm box air when there is no cargo. A third looked loaded but wasn't: the first reading after loading carried a probe sample taken *before* the load (`probe_t` lags `t`). Rule: a sample counts as cargo only if the vehicle was loaded when it was taken.
+- **Simulator label gap (for Track B):** VAN-ABJ1 drives at 22-36 km/h with the door open after a police checkpoint at 09:49 UTC, but the truth file has no `door_open_moving` interval for it. The console raises it correctly.
+- New incident type `ROUTE_DEVIATION`. Off route, the map shows the recorded position; dead-reckoning a hijacked truck along the road it left would be a lie.
+- **Footage.** A CDP screencast captured about 10 fps on the lanes and 1.5 fps on the WebGL map, and slowed the run itself. The clips are now rendered frame by frame on Playwright's fake clock (rAF, timers and `performance.now`), so they are smooth at 30 fps on any machine. CSS animation playback is slowed to match the capture rate.
+- The recordings caught two console bugs:
+  - **L for live** didn't work after dragging the time handle, the one moment its own hint suggests it. Every `<input>` counted as typing, including the range slider.
+  - **Map layers over the panels.** The map container formed no stacking context, so deck.gl's canvas and the new label layer drew over the fleet list. Fixed with `isolation: isolate`.
+
 ## The map's first visit froze for 25 seconds (Mon 5 Oct 2026)
 
 - After the console switched to simulator recordings, the map probe dropped from 59.9 to 38-48 fps. A probe sampling 3-second windows showed the steady state was still about 60 fps. The real problem was **the first 23-27 s after opening the map**, which the old probe's 4 s warm-up partly overlapped.

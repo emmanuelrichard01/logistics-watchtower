@@ -2,11 +2,10 @@
 
 **A cold-chain risk platform for refrigerated truck fleets on Nigerian roads.** Cargo spoils in the 30-40 °C heat while trucks cross long cellular dead zones. Watchtower's job is to tell an operator *which shipment will breach soonest, how sure the system is, why, and what to do*, before the cargo is lost.
 
-![The operator console: lanes drawn as track diagrams, with signal aspects for time-to-breach](docs/media/lanes-light.png)
+<p align="center"><img src="docs/media/tour-lanes.gif" alt="The lanes board: open a breaching truck's evidence, drag the time handle back to replay the morning, then return to live" width="960"></p>
+<p align="center"><sub>The lanes board: open a breaching truck's evidence, replay the morning, return to live. Full quality: <a href="docs/media/tour-lanes.mp4">MP4</a>.</sub></p>
 
-<p align="center"><img src="docs/media/walkthrough.gif" alt="Walkthrough: open an at-risk truck, scrub the time handle back to replay, then follow the truck on the map" width="960"></p>
-
-> **Status: v2 rebuild in progress** (week 1 of 14; [plan](plan/Logistics%20Watchtower%202.0%20Rebuild%20Plan.md)). The console runs on a seeded **synthetic** fleet; the streaming services are designed but not built yet. Every number in this README links to the measurement that produced it. Anything unmeasured is called a target.
+> **Status: v2 rebuild in progress** (week 1 of 14; [plan](plan/Logistics%20Watchtower%202.0%20Rebuild%20Plan.md)). The console replays a **synthetic** simulator recording; the streaming services are designed but not built yet. Every number in this README links to the measurement that produced it. Anything unmeasured is called a target.
 
 ## What makes it different
 
@@ -17,6 +16,39 @@ Most fleet dashboards answer "is this truck over the threshold right now?" Watch
 - **Dead zones are normal.** Devices buffer and replay. Late data updates its own minute bucket, and an alert learned late is still dated at its true event-time start.
 - **Any incident can be replayed exactly.** Everything that can change an output passes through one ordered input log, so replaying the archive reproduces every alert ([ADR-0005](docs/adr/0005-single-ordered-input-log.md), [ADR-0015](docs/adr/0015-determinism-contract.md)).
 - **A console designed for decisions.** Lanes are railway track diagrams and time-to-breach is a signal aspect, encoded by lamp position and count, not colour alone. One time handle replays every view at once ([console docs](docs/console/README.md)).
+
+## See it
+
+All footage is the production build replaying the simulator's showcase morning, rendered frame by frame at 30 fps (`apps/dashboard/scripts/media.mjs`). Every vehicle and reading is synthetic.
+
+<p align="center"><img src="docs/media/tour-map.gif" alt="The map: the fleet on real road geometry, the breaching truck selected with its trail and route ahead, 3D signal masts, then a Lagos van at street level" width="960"></p>
+<p align="center"><sub>The map: inter-state lanes, the breaching truck with its trail and route ahead, 3D signal masts, and a Lagos city round at street level. <a href="docs/media/tour-map.mp4">MP4</a>.</sub></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/evidence-dark.png" alt="Evidence layer in the dark theme: verdict, temperature chart with the limit, and why this score"></td>
+    <td width="50%"><img src="docs/media/map-3d.png" alt="3D map in the dark theme with a signal mast over the breaching truck"></td>
+  </tr>
+  <tr>
+    <td><sub><b>Evidence.</b> The verdict, minute-mean temperatures against the limit, and why the score is what it is.</sub></td>
+    <td><sub><b>3D.</b> Signal masts rise over trucks that need attention; lamp position carries the aspect.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/map-city.png" alt="A Lagos van on its morning round at street level, with customer drops and its route ahead"></td>
+    <td><img src="docs/media/tour-incidents.gif" alt="Incident workflow from the keyboard: acknowledge, mitigate, move to the next incident and open its evidence"></td>
+  </tr>
+  <tr>
+    <td><sub><b>City logistics.</b> Multi-drop rounds with delivery windows, on real streets.</sub></td>
+    <td><sub><b>Incidents.</b> A lifecycle board run from the keyboard. <a href="docs/media/tour-incidents.mp4">MP4</a>.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/media/phone-lanes.png" alt="Phone: compact lanes" width="250">
+  <img src="docs/media/phone-map.png" alt="Phone: map with a draggable bottom sheet, dark theme" width="250">
+  <img src="docs/media/phone-incidents.png" alt="Phone: incidents" width="250">
+</p>
+<p align="center"><sub>Full workflow parity on the phone: bottom tabs, compact lanes and draggable sheets.</sub></p>
 
 ## Architecture
 
@@ -48,10 +80,10 @@ The processor is the single owner of alert state ([ADR-0006](docs/adr/0006-alert
 | 2. Durable core | Schema with alerts, interventions, outbox and an append-only audit chain; the alert state machine with a single owner, as a pure function (ADR-0006) | Schema and state machine done; projector, outbox relay and API planned |
 | 3. Data layer | Bronze bucket provisioned on SeaweedFS | Planned |
 | 4. Decisions | Time-to-breach (exponential fit with a p10-p90 range), mean kinetic temperature, exposure and risk assessment (aspect, confidence, expected loss), composed by a pure vehicle evaluator: the processor's core | Started early; the processor's stream shell and console wiring planned |
-| 5. Experience | Operator console: lanes, evidence layer, map (2D/3D), incidents, health, phone layouts, replay | In progress, on synthetic data |
+| 5. Experience | Operator console: lanes, evidence layer, map (2D/3D), incidents, health, phone layouts, replay | In progress, on simulator recordings |
 | 6. Evidence | v1 runtime baseline | Planned |
 
-Simulator v2 is merged (virtual clock; two-node reefer thermal model; real road routes; dead zones with edge buffering; sensor and device faults; city last-mile in Lagos and Abuja; seeded fleet days with ground-truth labels). Still to come: bulk mode, live mode with a control API, and the signed gateway sink.
+Simulator v2 is complete: a virtual clock, a two-node reefer thermal model, real road routes, dead zones with edge buffering, sensor and device faults, city last-mile in Lagos and Abuja, seeded fleet days with ground-truth labels, live mode with signed delivery to the gateway and a fault-injection API, and a vectorised bulk mode (about 0.5M physics events/s at 25,000 trucks, [benchmark](docs/simulator/bulk-benchmark.md)). Its physics is checked by a generated [validation report](docs/simulator/validation.md).
 
 ## Quick start
 
@@ -113,11 +145,11 @@ Real decisions, with their trade-offs:
 
 ## Limitations
 
-- **No real fleet.** All data is synthetic. The console runs on a seeded timeline, and its time-to-breach comes from a provisional console-side estimator, not the risk engine.
+- **No real fleet.** All data is synthetic, generated by the simulator from seeded scenarios.
 - **The stream is only half built.** The gateway is built and produces to `wt.input.v1`, and the processor's core exists as a pure, tested function. But the stream shell that runs that core, the projector, the API and the archiver are still designed, not built, so nothing consumes the input log yet.
 - **CI has not run remotely.** The workflow exists, and the same checks pass locally.
 - **One laptop, single node.** The performance numbers come from one Windows laptop with integrated graphics and a single-node broker. Nothing here is a production claim.
-- **The console replays recordings, not a live stream.** It plays two time-aligned simulator recordings (four inter-state trucks with a degrading compressor, and Lagos city rounds in the morning rush) on real OSRM road and street geometry. Its time-to-breach is a provisional client-side estimate until the processor's risk assessments are streamed. Sensor-trust flags wait for probe-level fields in the recordings.
+- **The console replays a recording, not a live stream.** It plays the simulator's showcase morning (10 vehicles, inter-state and city, on real OSRM road and street geometry) using the device-reported probe values. Its time-to-breach is a provisional client-side estimate until the processor's risk assessments are streamed.
 - **The plan is the plan.** The 14-week schedule is a target, and the [plan](plan/Logistics%20Watchtower%202.0%20Rebuild%20Plan.md) states its own risks.
 
 ## Author

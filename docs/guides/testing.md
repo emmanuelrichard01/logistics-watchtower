@@ -57,7 +57,8 @@ The audit hash chain's constraints exist in the schema, but no test covers them 
 ## Console tests and probes
 
 - `src/data/synthetic.test.ts`: scenario truths for the synthetic timeline (see the [console docs](../console/README.md#data-contract)).
-- `scripts/perf-map.mjs`: map frame rate and long-task time. A measurement, not a pass/fail test.
+- `src/data/recording.test.ts`: reads the showcase recording from disk and checks that each story beat surfaces as the right incident (forecast before breach, flatlined probe, off route, no breach for an empty box).
+- `scripts/perf-map.mjs` and `scripts/perf-shaders.mjs`: cold-start settle time, frame rate and long-task time on the map, and link time per WebGL program. Measurements, not pass/fail tests.
 - `scripts/capture.mjs` and `scripts/media.mjs`: screenshots for design review and for these docs.
 
 ## Planned
@@ -70,5 +71,5 @@ From plan section 15, not built yet: scenario evaluation against ground-truth la
 cd apps/dashboard
 node scripts/check-doc-links.mjs                       # every relative link, image and #anchor resolves
 npm install --no-save mermaid@11 && node scripts/check-mermaid.mjs ../../README.md ../../docs/architecture/overview.md
-node scripts/media.mjs http://localhost:4173           # regenerate docs/media (needs a production preview and ffmpeg)
+node scripts/media.mjs http://localhost:4173           # regenerate docs/media (needs a production preview and ffmpeg; ONLY=shots|clips, CLIPS=lanes,map,incidents)
 ```

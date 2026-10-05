@@ -29,7 +29,10 @@ function Shell() {
         e.preventDefault()
         store.setPalette(true)
       }
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+      // Only text entry swallows shortcuts. The time handle is a range input,
+      // and its own hint promises "L for live" right after a drag.
+      const t = e.target
+      const typing = t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !['range', 'checkbox', 'radio', 'button'].includes(t.type))
       if (!typing && e.key === 'l' && !e.metaKey && !e.ctrlKey) store.goLive()
     }
     window.addEventListener('keydown', onKey)
