@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Topics from plan section 7. Runs before any consumer starts; safe to re-run.
+# Topic set v2.1 (plan section 7, as revised). Runs before any consumer starts; safe to re-run.
+# Every topic is keyed by vehicle_id, so one vehicle's records stay in order on one
+# partition all the way through the pipeline.
 set -euo pipefail
 
 DAY_MS=86400000
@@ -19,14 +21,17 @@ create() {
 
 retain() { echo "--topic-config=retention.ms=$(( $1 * DAY_MS ))"; }
 
-create telemetry.raw.v1        12 "$(retain 7)"
-create telemetry.quarantine.v1  3 "$(retain 30)"
-create telemetry.clean.v1      12 "$(retain 7)"
+create telemetry.raw.v1        12 "$(retain 7)"   # gateway output, as accepted
+create telemetry.quarantine.v1  3 "$(retain 30)"  # rejected, with reason codes
+# The processor's single ordered input: telemetry plus control records (TICK,
+# RULES_ACTIVATED, ASSIGNMENT_CHANGED, OPERATOR_COMMAND). Replaying this log alone
+# reproduces every output, which is what makes replay deterministic.
+create wt.input.v1             12 "$(retain 7)"
 create telemetry.late.v1        3 "$(retain 30)"
-create risk.assessments.v1      6 "$(retain 14)"
-create alerts.events.v1         6 "$(retain 30)"
-create fleet.state.v1          12 --topic-config=cleanup.policy=compact
-create rules.config.v1          1 --topic-config=cleanup.policy=compact
+create telemetry.minutes.v1    12 "$(retain 3)"   # minute buckets
+create risk.assessments.v1     12 "$(retain 14)"
+create alerts.events.v1        12 "$(retain 30)"
+create fleet.state.v1          12 --topic-config=cleanup.policy=compact --topic-config=segment.ms=600000
 
 for service in processor projector archiver notifier; do
   create "$service.dlq.v1" 3 "$(retain 30)"

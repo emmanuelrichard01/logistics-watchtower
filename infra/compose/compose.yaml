@@ -75,7 +75,7 @@ services:
         condition: service_healthy
       topics-init:
         condition: service_completed_successfully
-      s3-init:
+      objectstore-init:
         condition: service_completed_successfully
 
   postgres:
@@ -96,16 +96,16 @@ services:
       timeout: 5s
       retries: 24
 
-  # S3-compatible object store for the Parquet archive. SeaweedFS replaces MinIO,
-  # which stopped publishing community images (ADR-0013).
-  s3:
+  # S3-compatible object store for the Parquet archive. Named for its role so the
+  # implementation can change; SeaweedFS replaces the archived MinIO (ADR-0013).
+  objectstore:
     profiles: [core]
     image: chrislusf/seaweedfs:4.48
-    command: server -dir=/data -ip=s3 -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    command: server -dir=/data -ip=objectstore -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
     ports:
       - 127.0.0.1:18333:8333
     volumes:
-      - s3-data:/data
+      - objectstore-data:/data
       - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/status >/dev/null"]
@@ -113,21 +113,21 @@ services:
       timeout: 5s
       retries: 24
 
-  s3-init:
+  objectstore-init:
     profiles: [core]
     image: chrislusf/seaweedfs:4.48
     entrypoint: ["/bin/sh", "-c"]
     # Safe to re-run: creating an existing bucket is an error in weed shell.
     command:
       - >-
-        echo "s3.bucket.list" | weed shell -master=s3:9333 | grep -q "watchtower-bronze"
-        || echo "s3.bucket.create -name watchtower-bronze" | weed shell -master=s3:9333
+        echo "s3.bucket.list" | weed shell -master=objectstore:9333 | grep -q "watchtower-bronze"
+        || echo "s3.bucket.create -name watchtower-bronze" | weed shell -master=objectstore:9333
     depends_on:
-      s3:
+      objectstore:
         condition: service_healthy
     restart: "no"
 
 volumes:
   redpanda-data:
   postgres-data:
-  s3-data:
+  objectstore-data:
