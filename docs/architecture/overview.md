@@ -10,7 +10,8 @@ Status is as of the commit that last edited this file.
 | Area | Status | Where |
 | --- | --- | --- |
 | Event contract (Avro), event identity | Built | `packages/contracts`, ADR-0002 |
-| Domain: sequence-range dedup, minute buckets | Built (fold form; delta form per ADR-0016 still to do) | `packages/domain` |
+| Domain: sequence-range dedup, minute buckets, delta-returning `evaluate` | Built | `packages/domain`, ADR-0016 |
+| Domain: time-to-breach forecast (p10-p90), mean kinetic temperature, exposure | Built as pure functions, not yet wired into a processor | `packages/domain/src/watchtower_domain/forecast.py` |
 | Producer factory with pinned partitioner | Built | `packages/platform`, ADR-0017 |
 | Core infrastructure: Redpanda, Schema Registry, Postgres/PostGIS, SeaweedFS, topic init | Built | `infra/compose` |
 | Database schema | Built | `migrations/versions/0001_core_schema.py` |

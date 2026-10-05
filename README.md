@@ -44,10 +44,10 @@ The processor is the single owner of alert state ([ADR-0006](docs/adr/0006-alert
 | Phase (plan section 18) | What exists | Status |
 | --- | --- | --- |
 | 0. Foundation | v1 frozen and audited; uv workspace; quality gates; CI workflow (not yet run on GitHub); Avro contract and event identity; Compose core stack; database schema | Done, except the simulator and gateway |
-| 1. Reliable backbone | Sequence-range dedup and idempotent minute buckets (property-tested) | Started early; DLQ, engine spike, late data and sensor trust planned |
+| 1. Reliable backbone | Device-scoped dedup, idempotent minute buckets, delta-returning `evaluate`, deterministic eviction (property-tested) | Started early; DLQ, engine spike, late data and sensor trust planned |
 | 2. Durable core | Schema with alerts, interventions, outbox and an append-only audit chain | Schema done; services planned |
 | 3. Data layer | Bronze bucket provisioned on SeaweedFS | Planned |
-| 4. Decisions | Provisional time-to-breach estimator, console-only | Planned |
+| 4. Decisions | Time-to-breach (exponential fit with a p10-p90 range), mean kinetic temperature and exposure as pure, property-tested functions | Started early; wiring into the processor, ranking and alerts planned |
 | 5. Experience | Operator console: lanes, evidence layer, map (2D/3D), incidents, health, phone layouts, replay | In progress, on synthetic data |
 | 6. Evidence | v1 runtime baseline | Planned |
 
@@ -77,6 +77,7 @@ Real decisions, with their trade-offs:
 - **Order independence by construction.** Minute buckets accumulate integer hundredths, because float sums depend on order and would make a replay differ from the live run in the last bits. Property tests shuffle, duplicate and batch readings and assert identical state.
 - **An adversarial architecture review, kept on record.** A fresh-context review found 32 issues in the original plan: two writers to alert state, a non-replayable stream, random alert IDs, and an archived object store (MinIO, verified via the GitHub API). The fixes are recorded in ADRs 0005-0018 ([review](docs/architecture/review-2026-10-05.md)).
 - **Performance diagnosed, not guessed.** The console's map felt laggy. The measurement showed the dev server at 0.2-47.5 fps against **59.8-59.9 fps for the production build** on the reference laptop's GPU ([console docs](docs/console/README.md#performance)). Along the way, MapLibre's worker turned out to be missing from production builds, so the basemap never decoded tiles. Vite couldn't see the worker's computed URL; it's now bundled explicitly.
+- **A forecast that never pretends to be exact.** When cooling fails, cargo approaches ambient exponentially, so time-to-breach is a least-squares fit of that curve. Residual scatter widens it into a p10-p90 range, and a property test pins that the estimate never grows as cargo warms. Learned models come only after they beat this transparent baseline (`packages/domain/src/watchtower_domain/forecast.py`).
 - **Domain purity enforced by a test.** The domain package may import only the standard library, minus I/O, clocks and randomness. That makes it deterministic and reusable by the processor, the edge agent and replay.
 
 ## Repository

@@ -28,6 +28,12 @@ Lamp **position and count** carry the meaning, so colour never works alone (WCAG
 | Danger | Top, red | Cargo is beyond its limit now |
 | Unknown | All three hollow | Confidence too low to call; the reason is always shown |
 
+### Learning the grammar
+
+A track diagram is unfamiliar at first, so the console teaches itself. On the first visit, a **"Reading the board"** panel opens with the aspect key drawn using real signal heads, the symbol key (depot, dead zone, estimated position), the replay hint and the keyboard shortcuts. It remembers that it has been seen (`wt-guide-seen` in local storage) and stays one click away in the header.
+
+![The first-visit guide](../media/guide.png)
+
 ### Tokens
 
 Defined in `apps/dashboard/src/styles/tokens.css` for two scene-driven themes: **Enamel** (light, for daylight and phones outdoors) and **Operating Centre** (dark, for a dim control room).
@@ -58,7 +64,7 @@ Motion only ever conveys state.
 
 ### Lanes (home)
 
-Lanes are ordered by their worst aspect. The right column holds incident strips with their lifecycle action. On a crowded lane (more than six shipments, or more than two on screens narrower than 600 px), Clear shipments collapse to ticks so only the shipments that matter carry tags.
+Lanes are ordered by their worst aspect. The status headline ("1 shipment needs attention") is itself a control: it opens the most urgent shipment. The right column holds incident strips with their lifecycle action. On a crowded lane (more than six shipments, or more than two on screens narrower than 600 px), Clear shipments collapse to ticks so only the shipments that matter carry tags.
 
 ![Lanes, dark theme](../media/lanes-dark.png)
 
@@ -83,6 +89,7 @@ MapLibre draws the basemap, and deck.gl draws vehicles in their own canvas.
 - **Selected truck:** its route ahead lights cobalt and its last hour fades behind it. Follow mode tracks it bearing-up.
 - **3D:** pitches the camera, extrudes buildings and raises "signal posts" over at-risk trucks.
 - **Trip card:** ETA, remaining distance, next stop and route progress with its dead zones.
+- **Legend:** a compact chip explains the map's symbols.
 
 ![Map with a truck selected](../media/map-light.png)
 
@@ -108,7 +115,7 @@ Full workflow parity: a bottom tab bar, compact lanes, and draggable bottom shee
 
 ### Time handle and replay
 
-One time handle drives every view at once. Dragging it left replays the board, map, chart and queue together. <kbd>L</kbd> returns to live. <kbd>⌘K</kbd> opens a command palette for any truck, incident, view or command.
+One time handle drives every view at once. A "Drag to replay" hint sits on its track; dragging left replays the board, map, chart and queue together. <kbd>L</kbd> returns to live. Switching views uses a short cross-fade (View Transitions), skipped under reduced motion. <kbd>⌘K</kbd> opens a command palette for any truck, incident, view or command.
 
 ## Performance
 
@@ -126,7 +133,7 @@ What made the difference:
 - **Separate canvases.** deck.gl renders in its own canvas over MapLibre. Interleaving them made every vehicle update repaint the whole vector basemap.
 - **The MapLibre worker** is bundled explicitly (`?worker&url`). MapLibre finds its worker with a computed URL that Vite can't see, so production builds shipped without it and the basemap never decoded tiles.
 
-**Bundle:** the console shell is about 115 KB gzipped. The map chunk (MapLibre and deck.gl) is lazy-loaded on the Map view.
+**Bundle:** the console shell is about 116 KB of JavaScript plus 8 KB of CSS, gzipped. The map chunk (MapLibre and deck.gl) is lazy-loaded on the Map view.
 
 **Targets, not yet measured:** 1,000 live vehicles at 60 fps; INP under 100 ms; LCP under 2.5 s on a mid-range phone ([design brief](../design/console.md), section 9).
 
@@ -139,7 +146,7 @@ The console consumes the shapes in `apps/dashboard/src/domain/types.ts`. The API
 - `Shipment` and `Risk`: aspect, time-to-breach p10/p90, confidence, ordered reasons, expected loss and rule version.
 - `Incident`: type, severity, lifecycle state, true event-time start, occurrence count and playbook actions.
 
-`src/domain/risk.ts` is a **provisional** estimator: a straight-line fit for UI development only. Risk comes from the processor once it exists (ADR-0006). The synthetic timeline's scenarios are pinned by `src/data/synthetic.test.ts` (7 tests):
+`src/domain/risk.ts` is a **provisional** estimator: a straight-line fit for UI development only. The real model, an exponential fit with a p10-p90 range, already exists as a pure Python function (`packages/domain/src/watchtower_domain/forecast.py`) and will reach the console through the processor's risk assessments (ADR-0006). The synthetic timeline's scenarios are pinned by `src/data/synthetic.test.ts` (7 tests):
 
 - Gradual degradation warns before it breaches.
 - A dead-zone failure is dated at its true start.
