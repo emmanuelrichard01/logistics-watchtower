@@ -64,6 +64,8 @@ class Scenario:
     max_copies: int = 3
     named_dead_zones: bool = True
     burst_interval_ms: int = 10_000  # reporting interval while an alarm condition holds
+    operations: bool = False  # checkpoints, congestion, fuel, rest rules, drops (layer 3)
+    fleet_policy: dict[str, Any] = field(default_factory=lambda: {})
     raw: dict[str, Any] = field(default_factory=lambda: {}, compare=False)
 
     def with_duration(self, duration: int) -> "Scenario":
@@ -123,6 +125,8 @@ def parse(doc: dict[str, Any]) -> Scenario:
         max_copies=int(delivery.get("max_copies", 3)),
         named_dead_zones=bool(doc.get("named_dead_zones", True)),
         burst_interval_ms=duration_ms(doc.get("burst_interval", "10s")),
+        operations=bool(doc.get("operations", False)),
+        fleet_policy=dict(doc.get("fleet_policy") or {}),
         raw=doc,
     )
 

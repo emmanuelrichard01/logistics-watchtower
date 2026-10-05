@@ -47,6 +47,10 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `speed_kmh`, `heading_deg` | number | Speed, and compass heading of the current road segment |
 | `cargo_profile` | string | `frozen`, `pharma_2_8`, `bananas` or `fresh_produce` |
 | `setpoint_c`, `min_c`, `max_c` | number | Profile setpoint and allowed cargo range |
+| `pallets`, `cargo_weight_kg` | integer | Load on board; falls at each delivery drop |
+| `driver` | string or null | `cautious`, `normal` or `aggressive` when the operations model is on |
+| `stop_reason` | string or null | Why the truck is stopped: `police_checkpoint`, `toll`, `weighbridge`, `refuel`, `refuel_queue`, `mandated_rest`, `night_parking`, `drop:<pallets>`, `arrived`, or a stop type; null while driving |
+| `fuel_pct` | number | Tractor diesel |
 | `cargo_c` | number | True cargo (product) temperature, the one that spoils |
 | `air_c` | number | Return-air temperature (box air) |
 | `supply_air_c` | number | Air leaving the evaporator |

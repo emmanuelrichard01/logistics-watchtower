@@ -26,6 +26,13 @@ from watchtower_simulator.channel import Channel
 from watchtower_simulator.clock import iso, rng, to_datetime, to_ms
 from watchtower_simulator.device import Delivery, DeliveryPolicy, Device, Reading
 from watchtower_simulator.environment import Conditions, Weather, conditions
+from watchtower_simulator.operations import (
+    DRIVERS,
+    Drop,
+    FleetPolicy,
+    Operations,
+    road_features,
+)
 from watchtower_simulator.reefer import Reefer, ReeferParams
 from watchtower_simulator.routes import Route, load_routes
 from watchtower_simulator.scenario import Event, Scenario, VehicleSpec, duration_ms
@@ -67,6 +74,7 @@ class Stop:
     kind: StopType
     started_ms: int
     until_ms: int
+    reason: str = ""
 
 
 @dataclass
@@ -85,6 +93,7 @@ class VehicleSim:
     thermal: ThermalState
     weather: Weather
     km: float
+    pallets: int
     base_interval_ms: int
     burst_interval_ms: int
     speed_kmh: float = 0.0
@@ -102,6 +111,7 @@ class VehicleSim:
     last_sample_ms: int | None = None
     last_event_ms: int | None = None  # freshest reading the gateway has received
     cond: Conditions | None = None  # this tick's environment
+    operations: Operations | None = None
     open_truth: dict[str, int] = field(default_factory=lambda: {})
 
     def moving(self) -> bool:
@@ -200,12 +210,24 @@ class Simulation:
             thermal=ThermalState(air_c=air, cargo_c=cargo),
             weather=Weather(rng(s.seed, spec.vehicle_id, "weather")),
             km=spec.start_km,
+            pallets=spec.pallets,
             base_interval_ms=spec.sample_interval_ms or s.sample_interval_ms,
             burst_interval_ms=spec.burst_interval_ms or s.burst_interval_ms,
-            fuel_pct=stream.uniform(55.0, 95.0),
+            fuel_pct=float(spec.extra.get("fuel_pct", stream.uniform(55.0, 95.0))),
         )
         if spec.stopped:
             v.stop = Stop(STOP_TYPES["depot_loading"], s.start_ms, s.start_ms + s.duration_ms + 1)
+        if s.operations:
+            v.operations = Operations(
+                driver=DRIVERS[spec.extra.get("driver", "normal")],
+                policy=FleetPolicy.parse(s.fleet_policy),
+                features=road_features(route, s.seed),
+                rng=rng(s.seed, spec.vehicle_id, "operations"),
+                drops=[
+                    Drop(float(d["km"]), int(d["pallets"])) for d in spec.extra.get("drops", [])
+                ],
+            )
+            v.operations.skip_behind(spec.start_km)
         self.vehicles[spec.vehicle_id] = v
         return v
 
@@ -314,7 +336,7 @@ class Simulation:
             door_open=now < v.door_until_ms,
             defrost=self.defrosting(v, now),
             capacity_factor=v.reefer.capacity_factor() if self.power_available(v) else 0.0,
-            cargo_heat_kw=v.profile.respiration_kw(v.spec.pallets, v.thermal.cargo_c),
+            cargo_heat_kw=v.profile.respiration_kw(v.pallets, v.thermal.cargo_c),
         )
 
     def alarm(self, v: VehicleSim, i: Inputs) -> bool:
@@ -363,6 +385,7 @@ class Simulation:
                 "compressor_degraded": v.health < 0.95,
                 "reefer_power_lost": not self.power_available(v),
                 "storm": c.storm,
+                **self.stop_flags(v, now),
             },
         )
         if record:
@@ -375,9 +398,8 @@ class Simulation:
 
         if v.km >= v.route.length_km and not v.stopped(now):
             # Arrived: park with the engine off until the run ends.
-            v.stop = Stop(
-                STOP_TYPES["rest"], now, self.scenario.start_ms + self.scenario.duration_ms + 1
-            )
+            end = self.scenario.start_ms + self.scenario.duration_ms + 1
+            v.stop = Stop(STOP_TYPES["rest"], now, end, "arrived")
         stop = v.active_stop(now)
         if v.engine_running(now):
             v.reefer.power_source = "ENGINE"
@@ -402,19 +424,55 @@ class Simulation:
         )
 
         stopped = v.stopped(now)
+        ops = v.operations
         if stopped:
             v.target_kmh = 0.0
         elif now % 60_000 == 0 or v.target_kmh == 0.0:
             low, high = SPEED_BANDS[v.route.segment(v.km).road_class]
-            factor = v.cond.speed_factor if v.cond else 1.0
-            v.target_kmh = v.motion.uniform(low, high) * factor
+            target = v.motion.uniform(low, high)
+            if ops is not None:
+                target = ops.target_speed(target, v.route, v.km, now)
+            v.target_kmh = target * (v.cond.speed_factor if v.cond else 1.0)
         tau_s = 8.0 if stopped else 30.0
         v.speed_kmh += (v.target_kmh - v.speed_kmh) * min(1.0, dt_s / tau_s)
         if v.speed_kmh < 0.5 and stopped:
             v.speed_kmh = 0.0
         distance = v.speed_kmh * dt_s / 3600
+        prev_km = v.km
         v.km = min(v.route.length_km, v.km + distance)
         v.fuel_pct = max(0.0, v.fuel_pct - distance * LITRES_PER_KM / TANK_LITRES * 100)
+        if ops is not None and not stopped:
+            if ops.harsh_brake(distance):
+                v.speed_kmh *= 0.4
+                self.point_truth(v, now, "harsh_brake")
+            request = ops.next_stop(prev_km, v.km, now, v.fuel_pct, v.moving(), dt_s)
+            if request is not None:
+                self.begin_stop(v, now, request.stop_type, request.duration_s, request.reason)
+
+    def begin_stop(
+        self, v: VehicleSim, now: int, stop_type: str, duration_s: float, reason: str
+    ) -> None:
+        kind = STOP_TYPES[stop_type]
+        v.stop = Stop(kind, now, now + int(duration_s * 1000), reason)
+        door_s = min(door_open_seconds(kind, v.ops), duration_s)
+        if door_s > 0:
+            v.door_until_ms = now + int(door_s * 1000)
+        if stop_type == "fuel":
+            v.fuel_pct = max(v.fuel_pct, v.ops.uniform(90.0, 98.0))
+        if reason.startswith("drop:"):
+            v.pallets = max(0, v.pallets - int(reason.split(":")[1]))
+            capacity = v.profile.capacity_kj_per_k(v.pallets)
+            v.load = Load(max(capacity, 1.0), v.profile.cargo_ua_kw_per_k(v.pallets))
+
+    def stop_flags(self, v: VehicleSim, now: int) -> dict[str, bool]:
+        active = v.active_stop(now)
+        name = active.kind.name if active is not None else None
+        return {f"stop_{t}": name == t for t in STOP_TYPES}
+
+    def point_truth(self, v: VehicleSim, now: int, kind: str) -> None:
+        self.truth.append(
+            {"vehicle_id": v.spec.vehicle_id, "kind": kind, "start": iso(now), "end": iso(now)}
+        )
 
     # -- records -------------------------------------------------------------------------
 
@@ -464,6 +522,7 @@ class Simulation:
         self, v: VehicleSim, now: int, i: Inputs, lat: float, lon: float, heading: float
     ) -> dict[str, Any]:
         t, r = v.thermal, v.reefer
+        active = v.active_stop(now)
         return {
             "t": iso(now),
             "vehicle_id": v.spec.vehicle_id,
@@ -474,6 +533,11 @@ class Simulation:
             "speed_kmh": round(v.speed_kmh, 1),
             "heading_deg": round(heading, 1),
             "cargo_profile": v.profile.name,
+            "pallets": v.pallets,
+            "cargo_weight_kg": round(v.pallets * v.profile.kg_per_pallet),
+            "driver": v.operations.driver.name if v.operations else None,
+            "stop_reason": (active.reason or active.kind.name) if active else None,
+            "fuel_pct": round(v.fuel_pct, 1),
             "setpoint_c": v.profile.setpoint_c,
             "min_c": v.profile.min_c,
             "max_c": v.profile.max_c,

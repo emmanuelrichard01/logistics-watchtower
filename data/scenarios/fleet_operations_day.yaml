@@ -1,0 +1,23 @@
+# A realistic operating day: Monday departure through Lagos rush hour, police checkpoints,
+# tolls and a weighbridge, a refuel (one truck leaves low on diesel), mandated rests, and
+# a no-night-driving policy that parks the fleet overnight with reefers on gensets.
+# TRK-902 delivers to two stops on the way and its cargo weight goes down.
+name: fleet_operations_day
+seed: 902
+start: 2026-10-05T05:30:00Z   # Monday 06:30 WAT
+duration: 22h
+operations: true
+fleet_policy:
+  no_night_driving: true
+  max_drive_h: 4.0
+  rest_min: 30
+fleet:
+  - {vehicle_id: TRK-901, route: RT-LAG-ABJ, start_km: 2, cargo_profile: frozen, pallets: 20, driver: cautious}
+  - vehicle_id: TRK-902
+    route: RT-LAG-ABJ
+    start_km: 5
+    cargo_profile: fresh_produce
+    pallets: 18
+    driver: normal
+    drops: [{km: 166.0, pallets: 6}, {km: 374.0, pallets: 7}]
+  - {vehicle_id: TRK-903, route: RT-BEN-ABJ, start_km: 3, cargo_profile: pharma_2_8, pallets: 6, driver: aggressive, fuel_pct: 22}
