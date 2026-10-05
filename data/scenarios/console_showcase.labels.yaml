@@ -1,0 +1,20 @@
+scenario: console_showcase
+expect:
+  - {vehicle: TRK-101, kind: compressor_degraded, present: true}
+  - {vehicle: TRK-101, kind: cargo_excursion, present: true, starts_after: 90m}   # lags the degradation
+  - {vehicle: TRK-102, kind: cargo_excursion, present: true, starts_within: link_down}   # offline
+  - {vehicle: TRK-103, kind: door_open_moving, present: true}
+  - {vehicle: TRK-103, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-104, kind: fault_flatline_cargo_probe, present: true}
+  - {vehicle: TRK-104, kind: cargo_excursion, present: false}   # the probe lies, the cargo is fine
+  - {vehicle: TRK-104, kind: door_open_moving, present: false}
+  - {vehicle: TRK-105, kind: route_deviation, present: true}
+  - {vehicle: TRK-105, kind: unexplained_stop, present: true}
+  - {vehicle: TRK-105, kind: tracker_offline, present: true}
+  - {vehicle: TRK-106, kind: stop_cross_dock, present: true}
+  - {vehicle: VAN-ABJ2, kind: on_dock, shipment: SHP-106-A, present: true}
+  - {vehicle: VAN-ABJ1, kind: door_open_moving, present: true}   # unlatched after Maitama
+stops:
+  - {stop: ABJ-U1-03, in_spec: {SHP-ABJ-003: true}}   # insulated shipper
+  - {stop: ABJ-U1-04, in_spec: {SHP-ABJ-004: false}}  # loose cartons, door open on the move
+  - {stop: LAG-U1-03, on_time: false}                 # Island market, late off the bridge

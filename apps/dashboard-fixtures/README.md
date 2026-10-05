@@ -14,6 +14,20 @@ Recorded simulator runs for developing the operator console without a running ba
 
 Current recordings:
 
+- **`console_showcase`**, the main demo fixture: a Thursday morning, 3 hours, 10 vehicles. Trucks run with the operations model on (checkpoints, tolls, congestion); vans and a trike work city rounds; one truck cross-docks to a van. Fleet recording, truth and stop log included. Every story beat lands inside the window:
+
+  | Vehicle | What happens | Look for |
+  | --- | --- | --- |
+  | TRK-101 | Compressor degrades on Lagos-Abuja; box air climbs, the cargo lags and breaches about 2.4 h in | `compressor_health`, rising `duty_cycle_pct`, `cargo_excursion` |
+  | TRK-102 | Compressor fault just before the Otukpo dead zone; the excursion starts offline | `link_down`, `buffered`, `last_fix_age_s`, a late `cargo_excursion` |
+  | TRK-103 | Cargo door open at highway speed for 8 minutes | `door_open_moving` |
+  | TRK-104 | Cargo probe flatlines; the real cargo is fine | `cargo_probe_c` stuck while `cargo_c` moves; `fault_flatline_cargo_probe` |
+  | TRK-105 | Hijacked: leaves the corridor, stops away from any depot, door opened, tracker cut | `off_route_km`, `unexplained_stop`, `tracker_offline` |
+  | TRK-106 to VAN-ABJ2 | Cross-dock at the Abuja hub | `stop_cross_dock`, `on_dock`, the van's round planned from its real dispatch |
+  | VAN-ABJ1 | Abuja pharma round; door unlatched after Maitama | `door_open_moving` on a van; SHP-ABJ-004 delivered out of spec |
+  | VAN-LAG1, TRIKE-LAG3 | Lagos rush over Third Mainland Bridge | late stops in `*.stops.jsonl` |
+
+  Its ground truth is pinned by `data/scenarios/console_showcase.labels.yaml` and checked in CI.
 - `compressor_gradual_degradation`: the first 2 hours, 4 inter-state trucks. TRK-101's compressor health falls from 1.0 to 0.2 between 07:30 and 09:00 UTC, so its air temperature climbs while the cargo lags.
 - `lagos_last_mile_morning_rush`: the first 3 hours of a Monday morning in Lagos, with two vans and a trike on city rounds (`routes.geojson`, kind `urban`); truth and stop log included.
 - `cross_dock_handover_delay`: truth and stop log only. Two trucks hand over to Abuja vans; one handover waits on a hot open dock.
@@ -34,15 +48,29 @@ If your dev server already sends `Content-Encoding: gzip` for `.gz`, `res.text()
 
 ```bash
 F=apps/dashboard-fixtures
-uv run wt-sim run compressor_gradual_degradation --duration 2h --out /tmp/r.jsonl \
+SIM="uv run python -m watchtower_simulator.cli run"   # same as wt-sim; immune to broken venv shims
+$SIM console_showcase --out /tmp/r.jsonl --recording $F/console_showcase.fleet.jsonl.gz \
+  --truth $F/console_showcase.truth.jsonl --stops $F/console_showcase.stops.jsonl
+$SIM compressor_gradual_degradation --duration 2h --out /tmp/r.jsonl \
   --recording $F/compressor_gradual_degradation.fleet.jsonl.gz --truth $F/compressor_gradual_degradation.truth.jsonl
-uv run wt-sim run lagos_last_mile_morning_rush --duration 3h --out /tmp/r.jsonl \
+$SIM lagos_last_mile_morning_rush --duration 3h --out /tmp/r.jsonl \
   --recording $F/lagos_last_mile_morning_rush.fleet.jsonl.gz --truth $F/lagos_last_mile_morning_rush.truth.jsonl \
   --stops $F/lagos_last_mile_morning_rush.stops.jsonl
-uv run wt-sim run cross_dock_handover_delay --out /tmp/r.jsonl --recording /tmp/f.jsonl \
+$SIM cross_dock_handover_delay --out /tmp/r.jsonl --recording /tmp/f.jsonl \
   --truth $F/cross_dock_handover_delay.truth.jsonl --stops $F/cross_dock_handover_delay.stops.jsonl
 uv run python -m watchtower_simulator.export_console $F/routes.geojson
 ```
+
+## Live data instead of recordings
+
+For a running demo, stream the same scenario live and drive faults from the console's chaos panel:
+
+```bash
+uv run python -m watchtower_simulator.cli live console_showcase --speed 10 \
+  --sink http://127.0.0.1:18090 --control 127.0.0.1:18091
+```
+
+The control API is `POST /inject {"vehicle", "fault", "params"}` (fault is any scenario event type, e.g. `compressor_fault`, `door_open`, `sensor_fault` with `params.fault`), `GET /fleet` (each vehicle's latest fleet row, same schema as below) and `GET /health`. CORS allows `http://localhost:5173` by default; add origins with `--cors-origin`.
 
 Output is byte-identical for the same scenario and seed, compressed files included.
 
