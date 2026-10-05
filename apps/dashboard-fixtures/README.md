@@ -26,6 +26,15 @@ uv run wt-sim run compressor_gradual_degradation --duration 2h \
 
 Output is byte-identical for the same scenario and seed.
 
+## All routes (`routes.geojson`)
+
+Every route the simulator drives, on the same geometry, about 171 KB:
+
+- **One LineString per route.** Properties: `id`; `kind` (`corridor` for inter-state, `urban` for city rounds); `name`; `city` (urban only); `length_km`; `source` (`osrm` or `densified`); `slow_corridors` (`[{name, from_km, to_km}]`, e.g. Third Mainland Bridge); `dead_zones`.
+- **One Point per stop.** Properties: `route_id`, `stop_id`, `name`, `type` (`hub`, `supermarket`, `hospital`, `pharmacy`, `qsr`, `open_market`, `hotel` for urban; `depot` or `town` on corridors), `km_along`, `depot`, `window` (delivery window, `"HH:MM-HH:MM"` local time), `synthetic` (true for urban stops: invented customers, not real businesses).
+
+Planned versus actual arrival times depend on the run, so they're in each scenario's `*.stops.jsonl`.
+
 ## Corridors (`corridors.geojson`)
 
 A FeatureCollection, 146 KB:

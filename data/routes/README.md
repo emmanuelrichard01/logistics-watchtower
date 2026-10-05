@@ -18,6 +18,23 @@ Road geometry © [OpenStreetMap contributors](https://www.openstreetmap.org/copy
 - **Derived:** `road_class`. Any stretch within 12 km of an urban stop is `urban`, everything else `highway`. This is an approximation, not OSM road classes.
 - **Synthetic (illustrative):** the per-segment `signal` Markov probabilities and the named `dead_zones`. They are placed to exercise the pipeline, not measured network coverage.
 
+## Urban delivery rounds (`urban.geojson`)
+
+City distribution from cold-store hubs, routed on real streets by OSRM through every stop:
+
+| Route | City | Round | Length |
+| --- | --- | --- | --- |
+| LAG-U1 | Lagos | Ikeja hub to the Island, over Third Mainland Bridge | 39.3 km |
+| LAG-U2 | Lagos | Apapa hub along Ikorodu Road | 24.1 km |
+| ABJ-U1 | Abuja | Idu hub pharma round | 41.3 km |
+| PHC-U1 | Port Harcourt | Trans-Amadi hub retail round | 14.6 km |
+
+- **Stops are synthetic:** generic customers (supermarket, hospital, pharmacy, quick-service restaurant, open market, hotel) at plausible locations in real neighbourhoods. None represents a real business.
+- **Illustrative:** delivery windows and the slow-corridor centrelines (Third Mainland Bridge, Ikorodu Road).
+- **Fallback:** any route OSRM can't return is built from densified straight lines and marked `source: densified`.
+
+Regenerate with `uv run python -m watchtower_simulator.build_urban data/routes/osrm/urban data/routes/urban.geojson` (cached OSRM responses are reused).
+
 ## Regenerate
 
 ```bash

@@ -29,9 +29,15 @@ class DeadZone:
 
 @dataclass(frozen=True)
 class Town:
+    """A named point along a route: a corridor town, or an urban hub or customer stop."""
+
     name: str
     km: float
     kind: str
+    depot: bool = False
+    stop_id: str | None = None
+    stop_type: str | None = None  # hub, supermarket, hospital, pharmacy, qsr, open_market, hotel
+    window: str | None = None  # delivery window, "HH:MM-HH:MM" local time
 
 
 class Route:
@@ -40,12 +46,26 @@ class Route:
         self.route_id: str = props["route_id"]
         self.name: str = props["name"]
         self.length_km: float = props["length_km"]
+        self.kind: str = props.get("kind", "corridor")
+        self.city: str | None = props.get("city")
+        self.source: str = props.get("source", "osrm")
         self.points: list[LonLat] = [(c[0], c[1]) for c in feature["geometry"]["coordinates"]]
         scale = props["km_scale"]
         self.km: list[float] = [0.0]
         for a, b in pairwise(self.points):
             self.km.append(self.km[-1] + haversine_km(a, b) * scale)
-        self.towns = [Town(t["name"], t["km"], t["kind"]) for t in props["towns"]]
+        self.towns = [
+            Town(
+                t["name"],
+                t["km"],
+                t["kind"],
+                t.get("depot", False),
+                t.get("stop_id"),
+                t.get("stop_type"),
+                t.get("window"),
+            )
+            for t in props["towns"]
+        ]
         self.segments = [
             Segment(
                 s["from_km"],
@@ -93,7 +113,14 @@ def default_data_dir() -> Path:
     raise FileNotFoundError("could not locate data/routes/corridors.geojson")
 
 
+ROUTE_FILES = ("corridors.geojson", "urban.geojson")
+
+
 def load_routes(path: Path | None = None) -> dict[str, Route]:
-    path = path or default_data_dir() / "routes" / "corridors.geojson"
-    collection = json.loads(path.read_text(encoding="utf-8"))
-    return {r.route_id: r for r in (Route(f) for f in collection["features"])}
+    """Inter-state corridors and urban delivery rounds, by route id."""
+    paths = [path] if path else [default_data_dir() / "routes" / name for name in ROUTE_FILES]
+    routes: dict[str, Route] = {}
+    for p in paths:
+        collection = json.loads(p.read_text(encoding="utf-8"))
+        routes |= {r.route_id: r for r in (Route(f) for f in collection["features"])}
+    return routes

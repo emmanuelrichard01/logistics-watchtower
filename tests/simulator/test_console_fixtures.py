@@ -12,6 +12,7 @@ from watchtower_simulator.routes import default_data_dir, load_routes
 FIXTURES = default_data_dir().parent / "apps" / "dashboard-fixtures"
 CONSOLE: dict[str, Any] = json.loads((FIXTURES / "corridors.geojson").read_text(encoding="utf-8"))
 ROUTES = load_routes()
+CORRIDORS = {k: r for k, r in ROUTES.items() if r.kind == "corridor"}
 
 
 def lines() -> dict[str, dict[str, Any]]:
@@ -23,7 +24,7 @@ def lines() -> dict[str, dict[str, Any]]:
 
 
 def test_console_lines_are_the_simulator_geometry() -> None:
-    assert sorted(lines()) == sorted(ROUTES)
+    assert sorted(lines()) == sorted(CORRIDORS)
     for route_id, feature in lines().items():
         route = ROUTES[route_id]
         assert [tuple(c) for c in feature["geometry"]["coordinates"]] == route.points
@@ -38,7 +39,7 @@ def test_console_lines_are_the_simulator_geometry() -> None:
 
 def test_stations_sit_on_their_corridor_at_their_km_post() -> None:
     stations = [f for f in CONSOLE["features"] if f["geometry"]["type"] == "Point"]
-    assert {s["properties"]["corridor_id"] for s in stations} == set(ROUTES)
+    assert {s["properties"]["corridor_id"] for s in stations} == set(CORRIDORS)
     for s in stations:
         p = s["properties"]
         lat, lon, _ = ROUTES[p["corridor_id"]].position(p["km_along"])

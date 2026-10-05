@@ -8,8 +8,9 @@ ROUTES = load_routes()
 
 
 def test_three_corridors_on_real_roads() -> None:
-    assert sorted(ROUTES) == ["RT-BEN-ABJ", "RT-LAG-ABJ", "RT-PHC-MKD"]
-    for route in ROUTES.values():
+    corridors = {k: r for k, r in ROUTES.items() if r.kind == "corridor"}
+    assert sorted(corridors) == ["RT-BEN-ABJ", "RT-LAG-ABJ", "RT-PHC-MKD"]
+    for route in corridors.values():
         # Road distance well exceeds the straight line between the ends.
         straight = haversine_km(route.points[0], route.points[-1])
         assert route.length_km > 1.1 * straight
