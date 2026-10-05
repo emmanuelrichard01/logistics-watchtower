@@ -1,0 +1,67 @@
+{
+  "record_id": "e6970414-38f9-566d-86aa-fa98b086dc4e",
+  "schema_version": 1,
+  "vehicle_id": "TRK-101",
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "kind": "TELEMETRY",
+  "payload": {
+    "io.watchtower.telemetry.TelemetryEvent": {
+      "event_id": "e6970414-38f9-566d-86aa-fa98b086dc4e",
+      "schema_version": 1,
+      "vehicle_id": "TRK-101",
+      "device_id": "EDGE-0101",
+      "boot_id": "b-20261005-0412",
+      "seq": 18273,
+      "event_time": 1791184323250,
+      "ingest_time": 1791184361900,
+      "position": {
+        "io.watchtower.telemetry.Position": {
+          "lat": 7.3768,
+          "lon": 3.9398,
+          "speed_kmh": 85.3,
+          "heading_deg": {
+            "double": 42.7
+          },
+          "gps_fix": "FIX_3D",
+          "hdop": {
+            "double": 1.1
+          }
+        }
+      },
+      "reefer": {
+        "setpoint_c": -20.0,
+        "supply_air_c": {
+          "double": -21.4
+        },
+        "return_air_c": {
+          "double": -19.8
+        },
+        "cargo_probe_c": {
+          "double": -19.1
+        },
+        "compressor": "RUNNING",
+        "fault_code": null,
+        "defrost": false,
+        "power_source": "ENGINE",
+        "door": "CLOSED"
+      },
+      "vehicle": {
+        "fuel_pct": {
+          "double": 68.2
+        },
+        "battery_v": {
+          "double": 13.8
+        },
+        "ambient_c": {
+          "double": 33.5
+        }
+      },
+      "link": {
+        "signal_dbm": {
+          "int": -87
+        },
+        "buffered": true
+      }
+    }
+  }
+}

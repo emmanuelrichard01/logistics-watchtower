@@ -1,0 +1,17 @@
+{
+  "record_id": "21667d12-e21c-526d-9bca-992e6966ea50",
+  "schema_version": 1,
+  "vehicle_id": "TRK-101",
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "kind": "OPERATOR_COMMAND",
+  "payload": {
+    "io.watchtower.input.OperatorCommand": {
+      "intervention_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "alert_id": "2f1b7d2e-61f4-5b6a-9d6c-3a1e5c0b8f11",
+      "action": "ACK",
+      "actor_id": "operator-ada",
+      "note": null,
+      "command_time": 1791184365000
+    }
+  }
+}

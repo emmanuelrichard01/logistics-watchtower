@@ -1,0 +1,477 @@
+{
+  "type": "record",
+  "name": "InputRecord",
+  "namespace": "io.watchtower.input",
+  "doc": "One record on wt.input.v1, the processor's single ordered input log (ADR-0005). Everything that can change processor output arrives here, so replaying this log reproduces every output. Key: vehicle_id ('*' for fleet-wide records, written once per partition). Evolution: BACKWARD; only add optional fields with defaults, or new union branches at the end.",
+  "fields": [
+    {
+      "name": "record_id",
+      "type": {
+        "type": "string",
+        "logicalType": "uuid"
+      },
+      "doc": "Deterministic: event_id for telemetry, uuid5 of a natural key otherwise (watchtower_contracts.input_log)"
+    },
+    {
+      "name": "schema_version",
+      "type": "int"
+    },
+    {
+      "name": "vehicle_id",
+      "type": "string"
+    },
+    {
+      "name": "org_id",
+      "type": "string",
+      "doc": "Tenant; payload only, never part of a key (ADR-0017)"
+    },
+    {
+      "name": "kind",
+      "type": {
+        "type": "enum",
+        "name": "InputKind",
+        "symbols": [
+          "UNKNOWN",
+          "TELEMETRY",
+          "TICK",
+          "RULES_ACTIVATED",
+          "ASSIGNMENT_CHANGED",
+          "OPERATOR_COMMAND"
+        ],
+        "default": "UNKNOWN"
+      }
+    },
+    {
+      "name": "payload",
+      "type": [
+        {
+          "type": "record",
+          "name": "TelemetryEvent",
+          "namespace": "io.watchtower.telemetry",
+          "doc": "One reading from a truck's edge device, as accepted by the ingest gateway. Topics: telemetry.raw.v1, telemetry.clean.v1. Evolution: BACKWARD; only add optional fields with defaults.",
+          "fields": [
+            {
+              "name": "event_id",
+              "type": {
+                "type": "string",
+                "logicalType": "uuid"
+              },
+              "doc": "UUIDv5 of device_id, boot_id and seq (ADR-0002)"
+            },
+            {
+              "name": "schema_version",
+              "type": "int"
+            },
+            {
+              "name": "vehicle_id",
+              "type": "string"
+            },
+            {
+              "name": "device_id",
+              "type": "string"
+            },
+            {
+              "name": "boot_id",
+              "type": "string",
+              "doc": "Changes on every device reboot; seq restarts with it"
+            },
+            {
+              "name": "seq",
+              "type": "long",
+              "doc": "Per-boot sequence number; gaps reveal loss"
+            },
+            {
+              "name": "event_time",
+              "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              },
+              "doc": "Device clock at measurement, UTC"
+            },
+            {
+              "name": "ingest_time",
+              "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              },
+              "doc": "Gateway clock at acceptance, UTC"
+            },
+            {
+              "name": "position",
+              "type": [
+                "null",
+                {
+                  "type": "record",
+                  "name": "Position",
+                  "fields": [
+                    {
+                      "name": "lat",
+                      "type": "double"
+                    },
+                    {
+                      "name": "lon",
+                      "type": "double"
+                    },
+                    {
+                      "name": "speed_kmh",
+                      "type": "double"
+                    },
+                    {
+                      "name": "heading_deg",
+                      "type": [
+                        "null",
+                        "double"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "gps_fix",
+                      "type": {
+                        "type": "enum",
+                        "name": "GpsFix",
+                        "symbols": [
+                          "UNKNOWN",
+                          "NO_FIX",
+                          "FIX_2D",
+                          "FIX_3D"
+                        ],
+                        "default": "UNKNOWN"
+                      }
+                    },
+                    {
+                      "name": "hdop",
+                      "type": [
+                        "null",
+                        "double"
+                      ],
+                      "default": null
+                    }
+                  ]
+                }
+              ],
+              "default": null,
+              "doc": "Null when the device has no GPS fix"
+            },
+            {
+              "name": "reefer",
+              "type": {
+                "type": "record",
+                "name": "Reefer",
+                "fields": [
+                  {
+                    "name": "setpoint_c",
+                    "type": "double"
+                  },
+                  {
+                    "name": "supply_air_c",
+                    "type": [
+                      "null",
+                      "double"
+                    ],
+                    "default": null,
+                    "doc": "Null on probe dropout"
+                  },
+                  {
+                    "name": "return_air_c",
+                    "type": [
+                      "null",
+                      "double"
+                    ],
+                    "default": null,
+                    "doc": "Null on probe dropout"
+                  },
+                  {
+                    "name": "cargo_probe_c",
+                    "type": [
+                      "null",
+                      "double"
+                    ],
+                    "default": null,
+                    "doc": "Null on probe dropout"
+                  },
+                  {
+                    "name": "compressor",
+                    "type": {
+                      "type": "enum",
+                      "name": "CompressorState",
+                      "symbols": [
+                        "UNKNOWN",
+                        "RUNNING",
+                        "OFF",
+                        "FAULT"
+                      ],
+                      "default": "UNKNOWN"
+                    }
+                  },
+                  {
+                    "name": "fault_code",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "defrost",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "power_source",
+                    "type": {
+                      "type": "enum",
+                      "name": "PowerSource",
+                      "symbols": [
+                        "UNKNOWN",
+                        "ENGINE",
+                        "GENSET",
+                        "SHORE",
+                        "BATTERY"
+                      ],
+                      "default": "UNKNOWN"
+                    }
+                  },
+                  {
+                    "name": "door",
+                    "type": {
+                      "type": "enum",
+                      "name": "DoorState",
+                      "symbols": [
+                        "UNKNOWN",
+                        "OPEN",
+                        "CLOSED"
+                      ],
+                      "default": "UNKNOWN"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "vehicle",
+              "type": {
+                "type": "record",
+                "name": "Vehicle",
+                "fields": [
+                  {
+                    "name": "fuel_pct",
+                    "type": [
+                      "null",
+                      "double"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "battery_v",
+                    "type": [
+                      "null",
+                      "double"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "ambient_c",
+                    "type": [
+                      "null",
+                      "double"
+                    ],
+                    "default": null
+                  }
+                ]
+              }
+            },
+            {
+              "name": "link",
+              "type": {
+                "type": "record",
+                "name": "Link",
+                "fields": [
+                  {
+                    "name": "signal_dbm",
+                    "type": [
+                      "null",
+                      "int"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "buffered",
+                    "type": "boolean",
+                    "doc": "True when replayed from the device buffer after an outage"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "record",
+          "name": "Tick",
+          "doc": "Processing-time heartbeat, made an ordinary input so replay sees it in the same place",
+          "fields": [
+            {
+              "name": "tick_time",
+              "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            },
+            {
+              "name": "ticker_id",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "type": "record",
+          "name": "RulesActivated",
+          "doc": "Rule set switch, written once to every partition",
+          "fields": [
+            {
+              "name": "rule_version",
+              "type": "int"
+            },
+            {
+              "name": "partition",
+              "type": "int"
+            },
+            {
+              "name": "effective_time",
+              "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            }
+          ]
+        },
+        {
+          "type": "record",
+          "name": "AssignmentChanged",
+          "doc": "A shipment joins or leaves a vehicle, with the cargo limits in force",
+          "fields": [
+            {
+              "name": "shipment_id",
+              "type": "string"
+            },
+            {
+              "name": "change",
+              "type": {
+                "type": "enum",
+                "name": "AssignmentChange",
+                "symbols": [
+                  "UNKNOWN",
+                  "ASSIGNED",
+                  "UNASSIGNED"
+                ],
+                "default": "UNKNOWN"
+              }
+            },
+            {
+              "name": "valid_from",
+              "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            },
+            {
+              "name": "cargo_profile",
+              "type": {
+                "type": "record",
+                "name": "CargoProfileSnapshot",
+                "fields": [
+                  {
+                    "name": "name",
+                    "type": "string"
+                  },
+                  {
+                    "name": "setpoint_c",
+                    "type": "double"
+                  },
+                  {
+                    "name": "min_c",
+                    "type": "double"
+                  },
+                  {
+                    "name": "max_c",
+                    "type": "double"
+                  },
+                  {
+                    "name": "max_excursion_min",
+                    "type": [
+                      "null",
+                      "int"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "value_ngn",
+                    "type": [
+                      "null",
+                      "long"
+                    ],
+                    "default": null
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "record",
+          "name": "OperatorCommand",
+          "doc": "An operator action relayed from Postgres interventions through the outbox (ADR-0006)",
+          "fields": [
+            {
+              "name": "intervention_id",
+              "type": {
+                "type": "string",
+                "logicalType": "uuid"
+              }
+            },
+            {
+              "name": "alert_id",
+              "type": {
+                "type": "string",
+                "logicalType": "uuid"
+              }
+            },
+            {
+              "name": "action",
+              "type": {
+                "type": "enum",
+                "name": "OperatorAction",
+                "symbols": [
+                  "UNKNOWN",
+                  "ACK",
+                  "ASSIGN",
+                  "MITIGATE",
+                  "RESOLVE",
+                  "COMMENT"
+                ],
+                "default": "UNKNOWN"
+              }
+            },
+            {
+              "name": "actor_id",
+              "type": "string"
+            },
+            {
+              "name": "note",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "command_time",
+              "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
