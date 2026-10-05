@@ -2,6 +2,14 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## Week 1: simulator v2 core (Mon 5 Oct 2026)
+
+- Routes are real roads. The OSRM demo server routed all three v1 corridors through the v1 stops: Lagos-Abuja 817.5 km, Port Harcourt-Makurdi 564.2 km, Benin-Abuja 616.2 km. Simplified at 25 m, they come to 49 KB of GeoJSON. Road class (urban within 12 km of an urban stop) and the signal profiles and named dead zones are derived or illustrative, and labelled so.
+- **Thermal surprise:** with plausible trailer and cargo parameters, cargo thermal mass dominates. At compressor health 0.4 (the plan's example), a 2-8 °C pharma load never breaches, and at 0.2 in a standard trailer it takes over 4 hours. The degradation scenario therefore uses an aged trailer (wall UA 0.12 kW/K) and runs 8 hours; the breach lands about 3 h 40 min after health bottoms out. That lead time is exactly what time-to-breach should exploit, and it argues for long virtual-clock scenarios over compressed physics.
+- A frozen load's equilibrium time constant with a dead unit is about 4 days, because wall and cargo surface act in series. A test that assumed 10 days was enough was wrong, not the model.
+- Defrost: dumping the full 4 kW heater into the air node heated the box by about 30 K. Only about 0.8 kW reaches box air (the rest melts coil ice), which gives the expected brief 6-7 K return-air rise with cargo moving under 0.2 K.
+- Same seed means byte-identical readings, recording and truth (hashed in a test). Every emitted reading validates against the `telemetry_event` v1 Avro schema.
+
 ## Week 1, day 2 work and console direction (Mon 5 Oct 2026)
 
 - v1 runtime baseline measured, 3 to 2000 trucks (`docs/audit/v1-baseline.md`). Telemetry p99 was 107 ms and alert p99 147 ms at 2000 trucks. The v1 producer, not the pipeline, is the bottleneck: it sleeps *after* each tick, so at 2000 trucks it delivers only 62% of the intended rate.

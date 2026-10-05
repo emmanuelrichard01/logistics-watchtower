@@ -22,6 +22,11 @@ make check     # lint, type check and tests: exactly what CI runs
 | Path | Contents |
 | --- | --- |
 | `packages/domain/` | Pure domain logic. No I/O, strict type checking |
+| `packages/contracts/` | Avro event contracts and deterministic event identity |
+| `apps/simulator/` | Simulator v2 (`wt-sim`): real road routes, two-node reefer thermal model, dead zones, edge buffering |
+| `apps/dashboard-fixtures/` | Recorded simulator runs for console development (schema in its README) |
+| `data/routes/` | Corridor geometry from OpenStreetMap via OSRM (ODbL) |
+| `data/scenarios/` | Seeded scenarios and their ground-truth labels |
 | `tests/` | Test suite |
 | `docs/adr/` | Architecture decision records |
 | `docs/audit/` | v1 audit and baseline |
