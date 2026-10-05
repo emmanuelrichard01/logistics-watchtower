@@ -2,7 +2,7 @@
 
 Audit of `main` at `abc2a08` (tagged `v1-final`; on the `v2` branch the code lives in `legacy/v1/`), 5 Oct 2026. Rebuild plan, section 19, day 2.
 
-Simulation figures come from running the real `producer.py` and `processor.py` offline on a virtual clock (Kafka stubbed, 0.5 s ticks, fixed seeds). Runtime figures (throughput, produce-to-WebSocket latency, CPU and memory) are **not measured yet** and need the Compose stack. See the last section.
+Simulation figures come from running the real `producer.py` and `processor.py` offline on a virtual clock (Kafka stubbed, 0.5 s ticks, fixed seeds). Runtime figures come from the Compose stack (last section).
 
 ## Summary
 
@@ -48,20 +48,21 @@ Severity reflects impact on a monitoring system, not on the demo.
 14. **Health check always reports `online`.** It never checks broker connectivity. `api.py:415-430`
 15. **No event identity, no event-time handling, no DLQ.** A malformed message is logged and dropped. Duplicates are undetectable.
 16. **Process-local state.** All API state is lost on restart, and `latest` offset reset means restarts silently skip data.
+17. **Startup race hides alerts for 5 minutes.** If the API subscribes before the processor has created the `alerts` topic, librdkafka only notices the topic on its metadata refresh (`topic.metadata.refresh.interval.ms`, 5 min by default). Observed at 1000 trucks: the API group held only the `telemetry` partition, `alerts` was assigned **297 s** after startup, and it started at the log end (offset ~9,993). About 10,000 alerts never reached the dashboard. Whether this happens depends on container start order. `api.py:304`
 
 ### Security
 
-17. **Stored XSS path.** Alert and telemetry fields are interpolated into `innerHTML` and inline `onclick` handlers. Kafka is unauthenticated and exposed on host port 9092, so anyone on the network can inject script into the operator console. `index.html:1137-1154`, `:1223`
-18. **CORS `*` with credentials.** Starlette echoes any origin. `api.py:377-383`
-19. **No auth** on REST or WebSocket. The hardcoded `ws://localhost:8000` means the dashboard only works on the host machine. `index.html:1289`
+18. **Stored XSS path.** Alert and telemetry fields are interpolated into `innerHTML` and inline `onclick` handlers. Kafka is unauthenticated and exposed on host port 9092, so anyone on the network can inject script into the operator console. `index.html:1137-1154`, `:1223`
+19. **CORS `*` with credentials.** Starlette echoes any origin. `api.py:377-383`
+20. **No auth** on REST or WebSocket. The hardcoded `ws://localhost:8000` means the dashboard only works on the host machine. `index.html:1289`
 
 ### Build and hygiene
 
-20. `confluent_kafka` is imported but not declared (it arrives transitively via quixstreams). `pandas`, `faker`, `python-multipart` and `python-dotenv` are declared but unused. Nothing is pinned or locked.
-21. The image installs `build-essential` without needing it and runs as root. Compose builds the same image three times. There's no restart policy, and port 29092 is exposed to the host.
-22. Zero tests, no CI, no linting or type checking.
-23. Dead code: `demo_alert_active`, `demo_ticks_remaining`, `low_fuel_mode`, the `UNLOADING`/`IDLE`/`MAINTENANCE` states and the `LOW` severity are never used. `datetime.utcnow()` is deprecated.
-24. The dashboard isn't served by any container. It's opened from disk.
+21. `confluent_kafka` is imported but not declared (it arrives transitively via quixstreams). `pandas`, `faker`, `python-multipart` and `python-dotenv` are declared but unused. Nothing is pinned or locked.
+22. The image installs `build-essential` without needing it and runs as root. Compose builds the same image three times. There's no restart policy, and port 29092 is exposed to the host.
+23. Zero tests, no CI, no linting or type checking.
+24. Dead code: `demo_alert_active`, `demo_ticks_remaining`, `low_fuel_mode`, the `UNLOADING`/`IDLE`/`MAINTENANCE` states and the `LOW` severity are never used. `datetime.utcnow()` is deprecated.
+25. The dashboard isn't served by any container. It's opened from disk.
 
 ## Worth carrying into v2
 
@@ -71,11 +72,27 @@ Severity reflects impact on a monitoring system, not on the demo.
 - Rule metadata shape (`severity`, `action_required`, `threshold`, `actual_value`), which maps onto the v2 evidence and playbook fields.
 - The dashboard's map and toast-coalescing ideas (as UI only; the incident queue becomes the record).
 
-## Runtime baseline (to do)
+## Runtime baseline
 
-Not measured in this audit. To capture before v2 work starts:
+Measured 5 Oct 2026 with `legacy/v1/baseline/run.sh` (raw results: `legacy/v1/baseline/results/20261005T091900Z.jsonl`).
 
-- [ ] Sustained events/s through producer → Redpanda → processor → API at `FLEET_SIZE` 3, 100, 1000.
-- [ ] Produce-to-WebSocket latency p50/p95/p99, stamped at produce and at receipt by a headless client.
-- [ ] CPU and memory per container (`docker stats`) at each fleet size.
-- [ ] Record hardware, Docker version and commit hash with the numbers.
+**Setup.** Intel i7-10510U (4 cores / 8 threads), 7.8 GB RAM, Windows 11 Pro 10.0.26300, Docker Desktop engine 29.8.1 with a 4 GB / 8 vCPU VM. v1 at `v1-final` with `DEMO_MODE=true` (so the alert path carries traffic) and the default 0.5 s tick. Each fleet size: 20 s warm-up, then a 60 s measurement, one run each.
+
+**Method.** A WebSocket client runs inside the Compose network, so it shares the producer's clock. Latency runs from the producer building the event (its `timestamp` field) to the frame arriving at the client. Before measuring, the driver waits for the `alerts` topic and restarts the API, to work around defect 17. Without that, alerts are invisible for the first 5 minutes.
+
+| Trucks | Intended events/s | Delivered events/s | Telemetry p50 / p95 / p99 (ms) | Alert p50 / p95 / p99 (ms) | CPU: producer / API / processor / Redpanda |
+| ---: | ---: | ---: | --- | --- | --- |
+| 3 | 6 | 6.0 (100%) | 14 / 19 / 28 | 27 / 38 / 39 (n=3) | 0.3% / 0.8% / 0.3% / 4.4% |
+| 100 | 200 | 196 (98%) | 14 / 19 / 22 | 23 / 31 / 38 | 3.5% / 2.7% / 0.8% / 3.1% |
+| 300 | 600 | 561 (93%) | 17 / 24 / 30 | 26 / 38 / 42 | 8.2% / 9.3% / 2.3% / 9.7% |
+| 1000 | 2000 | 1526 (76%) | 24 / 50 / 82 | 38 / 71 / 105 | 18% / 18% / 5.8% / 8.4% |
+| 2000 | 4000 | 2484 (62%) | 28 / 64 / 107 | 48 / 102 / 147 | 58% / 56% / 18% / 24% |
+
+CPU is a single `docker stats` sample taken mid-measurement (100% = one core). Memory stayed flat: about 51 MiB for each Python service and 330-440 MiB for Redpanda.
+
+**Reading the numbers**
+
+- **The producer is the bottleneck, not the pipeline.** It sleeps 0.5 s *after* each tick's work instead of holding a fixed schedule, so the tick stretches as the fleet grows (about 0.8 s at 2000 trucks). Nothing downstream was saturated at 2,484 events/s.
+- **Latency hides that backlog.** The clock starts when the producer builds the event, so time spent waiting for a late tick is invisible: a coordinated-omission effect. v2 timers start at gateway ingest and use an open-loop generator (plan section 16).
+- **The "< 200 ms" README claim** is roughly consistent with these numbers (alert p99 147 ms, max 198 ms at 2000 trucks), but it was never measured and named no start or stop point. It now has one, with the caveat above.
+- Not covered: no repeats (spread unknown), no soak, no failure injection.
