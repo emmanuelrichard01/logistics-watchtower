@@ -1,0 +1,133 @@
+# Watchtower local stack. `make up` starts the `core` profile and waits for health.
+# Host ports use a 1xxxx prefix and bind to 127.0.0.1 only, so they neither collide
+# with other local stacks nor reach the network. No fixed container names (v1 collided).
+name: watchtower
+
+x-redpanda-image: &redpanda-image docker.redpanda.com/redpandadata/redpanda:v26.2.3
+
+services:
+  redpanda:
+    profiles: [core]
+    image: *redpanda-image
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://127.0.0.1:19092
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://127.0.0.1:18082
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+    ports:
+      - 127.0.0.1:19092:19092 # Kafka API
+      - 127.0.0.1:18081:18081 # Schema Registry
+      - 127.0.0.1:18082:18082 # HTTP proxy
+      - 127.0.0.1:19644:9644 # Admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -qE 'Healthy:.+true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # Creates every topic from plan section 7 with its partitions and retention, and
+  # turns topic auto-creation off, before any consumer can start. v1 audit defect 17:
+  # a consumer that subscribed before its topic existed missed alerts for 5 minutes.
+  # Services that consume must depend on this with service_completed_successfully.
+  topics-init:
+    profiles: [core]
+    image: *redpanda-image
+    entrypoint: ["/bin/bash", "/scripts/create-topics.sh"]
+    environment:
+      RPK_BROKERS: redpanda:9092
+      RPK_ADMIN_HOSTS: redpanda:9644
+    volumes:
+      - ./redpanda/create-topics.sh:/scripts/create-topics.sh:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+
+  console:
+    profiles: [core]
+    image: docker.redpanda.com/redpandadata/console:v3.12.0
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      SCHEMAREGISTRY_ENABLED: "true"
+      SCHEMAREGISTRY_URLS: http://redpanda:8081
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
+    ports:
+      - 127.0.0.1:18080:8080
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/health >/dev/null 2>&1 || curl -fsS http://localhost:8080/admin/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    # Waiting on the one-shot jobs also lets `up --wait` treat their exit 0 as success.
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      topics-init:
+        condition: service_completed_successfully
+      objectstore-init:
+        condition: service_completed_successfully
+
+  postgres:
+    profiles: [core]
+    # PostGIS from day one, so Tier 1 geo queries need no image change.
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_DB: watchtower
+      POSTGRES_USER: watchtower
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-watchtower}
+    ports:
+      - 127.0.0.1:15432:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U watchtower -d watchtower"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # S3-compatible object store for the Parquet archive. Named for its role so the
+  # implementation can change; SeaweedFS replaces the archived MinIO (ADR-0013).
+  objectstore:
+    profiles: [core]
+    image: chrislusf/seaweedfs:4.48
+    command: server -dir=/data -ip=objectstore -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - 127.0.0.1:18333:8333
+    volumes:
+      - objectstore-data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/status >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  objectstore-init:
+    profiles: [core]
+    image: chrislusf/seaweedfs:4.48
+    entrypoint: ["/bin/sh", "-c"]
+    # Safe to re-run: creating an existing bucket is an error in weed shell.
+    command:
+      - >-
+        echo "s3.bucket.list" | weed shell -master=objectstore:9333 | grep -q "watchtower-bronze"
+        || echo "s3.bucket.create -name watchtower-bronze" | weed shell -master=objectstore:9333
+    depends_on:
+      objectstore:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  redpanda-data:
+  postgres-data:
+  objectstore-data:

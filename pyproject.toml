@@ -8,12 +8,17 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "alembic>=1.20.0",
+    "confluent-kafka>=2.6",
     "fastavro>=1.12.2",
     "hypothesis>=6.168.4",
     "pre-commit>=4",
+    "psycopg[binary]>=3.2",
     "pyright>=1.1.400",
     "pytest>=8",
     "ruff>=0.16",
+    "sqlalchemy>=2",
+    "testcontainers[postgres]>=4.10",
 ]
 
 [tool.uv]
@@ -30,6 +35,8 @@ target-version = "py312"
 extend-exclude = [".claude", "legacy"]
 
 [tool.ruff.lint]
+# Migration DDL is SQL text, laid out for reading as SQL.
+per-file-ignores = { "migrations/versions/*.py" = ["E501"] }
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "PT", "N"]
 
 [tool.pyright]
@@ -41,5 +48,7 @@ strict = ["packages/contracts", "packages/domain"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+# Integration tests need Docker; `make test-integration` selects them with -m integration.
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-m", "not integration"]
+markers = ["integration: starts real containers through Testcontainers (needs Docker)"]
 xfail_strict = true
