@@ -117,15 +117,49 @@ services:
     profiles: [core]
     image: chrislusf/seaweedfs:4.48
     entrypoint: ["/bin/sh", "-c"]
-    # Safe to re-run: creating an existing bucket is an error in weed shell.
+    # Safe to re-run. The objectstore healthcheck covers the master, not the filer, so
+    # the first bucket listing can fail ("missing address") before the filer is up; a
+    # failed listing used to look like "no bucket" and the create then failed with
+    # "already exists". Retry until listing works; treat "already exists" as done.
+    # weed shell exits 0 even on errors, so success is read from its output.
     command:
       - >-
-        echo "s3.bucket.list" | weed shell -master=objectstore:9333 | grep -q "watchtower-bronze"
-        || echo "s3.bucket.create -name watchtower-bronze" | weed shell -master=objectstore:9333
+        for attempt in $$(seq 1 30); do
+          echo "s3.bucket.list" | weed shell -master=objectstore:9333 > /tmp/list 2>&1;
+          if grep -q "error" /tmp/list; then sleep 2; continue; fi;
+          if grep -q "watchtower-bronze" /tmp/list; then echo "bucket exists"; exit 0; fi;
+          echo "s3.bucket.create -name watchtower-bronze" | weed shell -master=objectstore:9333 > /tmp/create 2>&1;
+          cat /tmp/create;
+          if grep -q "error" /tmp/create && ! grep -q "already exists" /tmp/create; then sleep 2; continue; fi;
+          exit 0;
+        done; echo "objectstore never became ready"; exit 1
     depends_on:
       objectstore:
         condition: service_healthy
     restart: "no"
+
+  # Ingest gateway (ADR-0021): devices POST signed batches; accepted readings go to
+  # wt.input.v1, rejections to telemetry.quarantine.v1. Starts only after the topics exist.
+  gateway:
+    profiles: [core]
+    build:
+      context: ../..
+      dockerfile: apps/gateway/Dockerfile
+    image: watchtower/gateway:dev
+    environment:
+      WT_GATEWAY_BOOTSTRAP_SERVERS: redpanda:9092
+      WT_GATEWAY_SCHEMA_REGISTRY_URL: http://redpanda:8081
+      WT_GATEWAY_DEVICE_KEYS_FILE: /etc/watchtower/device-keys.json
+    volumes:
+      # Development keys only; a real deployment mounts them from a secrets store.
+      - ./gateway/device-keys.json:/etc/watchtower/device-keys.json:ro
+    ports:
+      - 127.0.0.1:18090:8000
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      topics-init:
+        condition: service_completed_successfully
 
 volumes:
   redpanda-data:

@@ -1,0 +1,26 @@
+{
+  "record_id": "adc98a60-9a1c-58df-8277-eadcf4a5a2f0",
+  "schema_version": 1,
+  "vehicle_id": "TRK-101",
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "kind": "ASSIGNMENT_CHANGED",
+  "payload": {
+    "io.watchtower.input.AssignmentChanged": {
+      "shipment_id": "SHP-24100",
+      "change": "ASSIGNED",
+      "valid_from": 1791184365000,
+      "cargo_profile": {
+        "name": "Frozen fish",
+        "setpoint_c": -20.0,
+        "min_c": -25.0,
+        "max_c": -15.0,
+        "max_excursion_min": {
+          "int": 30
+        },
+        "value_ngn": {
+          "long": 18500000
+        }
+      }
+    }
+  }
+}

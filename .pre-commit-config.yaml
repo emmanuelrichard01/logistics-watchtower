@@ -31,6 +31,12 @@ repos:
         types_or: [python, pyi]
         require_serial: true
 
+  # Dockerfile lint; the hadolint binary ships in the wheel, so no Docker is needed.
+  - repo: https://github.com/AleksaC/hadolint-py
+    rev: v2.15.1
+    hooks:
+      - id: hadolint
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:

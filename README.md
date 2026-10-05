@@ -24,8 +24,9 @@ make up        # start the local stack (Docker), then: make migrate
 | --- | --- |
 | `packages/domain/` | Pure domain logic. No I/O, strict type checking |
 | `packages/contracts/` | Avro schemas and event identity |
-| `packages/platform/` | I/O adapters (Kafka producer factory with pinned settings) |
-| `infra/compose/` | Local stack: Redpanda, Schema Registry, Console, PostGIS, SeaweedFS (`make up`) |
+| `apps/gateway/` | Ingest gateway: validates and signature-checks device batches, produces to `wt.input.v1`, quarantines the rest (ADR-0021) |
+| `packages/platform/` | I/O adapters: Kafka producer factory with pinned settings, Schema Registry client |
+| `infra/compose/` | Local stack: Redpanda, Schema Registry, Console, PostGIS, SeaweedFS, gateway on 127.0.0.1:18090 (`make up`) |
 | `migrations/` | Alembic migrations for the Postgres schema (`make migrate`) |
 | `tests/integration/` | Container-backed tests (`make test-integration`, needs Docker) |
 | `tests/` | Test suite |

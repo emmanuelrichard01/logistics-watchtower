@@ -17,6 +17,16 @@ Surprises and measurements, newest first. Raw material for the case study.
 - **Console map performance.** On the reference laptop's GPU, the production build holds 59.8-59.9 fps on the map, against 0.2-47.5 fps on the Vite dev server (`apps/dashboard/scripts/perf-map.mjs`, 3 runs each). Two console bugs found by measuring rather than looking:
   - MapLibre's worker was missing from production builds: it locates the worker with a computed URL that Vite can't see. Fixed by bundling it via `?worker&url`.
   - A basemap layer added from a `styledata` event (which fires mid-load) silently aborted the style.
+## Week 1, day 6 work: ingest gateway (Mon 5 Oct 2026)
+
+- `input_record` v1 is the envelope for `wt.input.v1`. Avro can't import a schema from another file without registry references, so it embeds `TelemetryEvent` verbatim, and a test fails if the copy ever drifts from `telemetry_event`. Control-record IDs are uuid5 of documented natural keys, pinned by tests.
+- Golden payloads use Avro's JSON encoding, the standard text form, so they parse with logical types intact and need no hand-written converter. `fastavro.json_reader` expects one record per line, so the test reads the pretty-printed files through `json.dumps` first.
+- The gateway answers only after broker acknowledgement. With no broker, a real librdkafka producer plus `message.timeout.ms` makes the request return 503 in about the configured timeout, instead of 202 for data still queued.
+- **Signature before identity.** A tampered reading fails the signature check before any later rule. So the property test re-signs each corruption to reach its specific reason, and separately checks that an unsigned corruption is caught no later than `BAD_SIGNATURE`.
+- `make up` failed on a re-run. `objectstore-init` listed buckets before the SeaweedFS filer was ready ("missing address"); the failed listing looked like "no bucket", and the create then failed with "already exists". The objectstore healthcheck covers the master only. The init now retries until listing works and treats "already exists" as success.
+- `make up` now passes `--build`. Without it, Compose kept running a stale gateway image after a Dockerfile change.
+- Starlette's test client now wants `httpx2`; plain `httpx` raises a deprecation warning.
+- The live smoke test against the Compose gateway (127.0.0.1:18090) returned 202, with one accepted and one quarantined (`BAD_SIGNATURE`). `rpk` showed the input record in Confluent framing (schema ID 1), keyed `TRK-101`.
 
 ## Week 1, day 4 work: core infrastructure (Mon 5 Oct 2026)
 

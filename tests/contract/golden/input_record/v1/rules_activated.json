@@ -1,0 +1,14 @@
+{
+  "record_id": "e0bce033-74fe-5e54-9679-d70ff6ab3723",
+  "schema_version": 1,
+  "vehicle_id": "*",
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "kind": "RULES_ACTIVATED",
+  "payload": {
+    "io.watchtower.input.RulesActivated": {
+      "rule_version": 3,
+      "partition": 0,
+      "effective_time": 1791184365000
+    }
+  }
+}

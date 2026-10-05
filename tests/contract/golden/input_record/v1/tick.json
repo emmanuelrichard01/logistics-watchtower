@@ -1,0 +1,13 @@
+{
+  "record_id": "1af78463-552d-5cc9-9eb1-0540a158d728",
+  "schema_version": 1,
+  "vehicle_id": "TRK-101",
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "kind": "TICK",
+  "payload": {
+    "io.watchtower.input.Tick": {
+      "tick_time": 1791184365000,
+      "ticker_id": "ticker-0"
+    }
+  }
+}
