@@ -9,7 +9,11 @@ export function pathBetween(corridor: Corridor, fromKm: number, toKm: number): L
   const b = Math.min(corridor.lengthKm, Math.max(fromKm, toKm))
   const start = positionAt(corridor, a)
   const end = positionAt(corridor, b)
-  const inner = corridor.stations.filter((s) => s.km > a && s.km < b).map((s): LngLat => [s.lon, s.lat])
+  // Real road geometry when present; station-to-station otherwise.
+  const inner =
+    corridor.path && corridor.pathKm
+      ? corridor.path.filter((_, i) => corridor.pathKm![i] > a && corridor.pathKm![i] < b)
+      : corridor.stations.filter((s) => s.km > a && s.km < b).map((s): LngLat => [s.lon, s.lat])
   return [[start.lon, start.lat], ...inner, [end.lon, end.lat]]
 }
 
@@ -54,8 +58,9 @@ export function trailOf(timeline: Timeline, vehicleId: string, t: number, minute
 }
 
 export function fleetBounds(corridors: Corridor[]): [LngLat, LngLat] {
-  const lons = corridors.flatMap((c) => c.stations.map((s) => s.lon))
-  const lats = corridors.flatMap((c) => c.stations.map((s) => s.lat))
+  const pts = corridors.flatMap((c) => (c.path ? c.path.filter((_, i) => i % 25 === 0) : c.stations.map((s): LngLat => [s.lon, s.lat])))
+  const lons = pts.map(([lon]) => lon)
+  const lats = pts.map(([, lat]) => lat)
   return [
     [Math.min(...lons), Math.min(...lats)],
     [Math.max(...lons), Math.max(...lats)],

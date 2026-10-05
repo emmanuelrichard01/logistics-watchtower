@@ -73,13 +73,13 @@ export function TripCard({ onFollow }: { onFollow: () => void }) {
           ))}
         </div>
         <p className="trip-progress__labels">
-          <span>{corridor.stations[0].name}</span>
+          <span title={corridor.stations[0].name}>{corridor.stations[0].name}</span>
           {next && (
-            <span className="trip-progress__next num">
+            <span className="trip-progress__next num" title={next.name}>
               Next: {next.name}, {Math.round(next.km - vehicle.km)} km
             </span>
           )}
-          <span>{shipment.destination}</span>
+          <span title={corridor.stations.at(-1)?.name}>{corridor.stations.at(-1)?.name ?? shipment.destination}</span>
         </p>
       </div>
 

@@ -11,6 +11,10 @@ export interface Station {
   lat: number
   lon: number
   depot?: boolean // cold storage available
+  /** Urban customers: hub, supermarket, hospital, pharmacy, qsr, open_market, hotel. */
+  type?: string
+  /** Delivery window, local time, e.g. "07:30-10:00". */
+  window?: string
 }
 
 export interface DeadZone {
@@ -25,6 +29,12 @@ export interface Corridor {
   stations: Station[]
   lengthKm: number
   deadZones: DeadZone[]
+  /** 'corridor' for inter-state lanes, 'urban' for city delivery rounds. */
+  kind?: 'corridor' | 'urban'
+  city?: string
+  /** Real road geometry [lon, lat] with cumulative km at each vertex. */
+  path?: [number, number][]
+  pathKm?: number[]
 }
 
 export interface CargoProfile {

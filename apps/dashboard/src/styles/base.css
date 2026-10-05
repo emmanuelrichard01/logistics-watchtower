@@ -90,3 +90,11 @@ input {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Shown until the recordings load. */
+.boot {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--ink-3);
+}

@@ -126,7 +126,10 @@ export function MapView() {
     const map = mapRef.current
     if (!map || !selected) return
     const v = fleetAt(store.timeline, store.precise()).find((x) => x.vehicle.vehicleId === selected)
-    if (v) map.easeTo({ center: v.position, zoom: Math.max(map.getZoom(), 7.5), padding: panelPadding(), duration: 800 })
+    if (!v) return
+    // City rounds need street level; inter-state trucks read best at region level.
+    const urban = store.timeline.corridors.find((c) => c.id === v.vehicle.corridorId)?.kind === 'urban'
+    map.easeTo({ center: v.position, zoom: urban ? Math.max(map.getZoom(), 12.5) : Math.max(map.getZoom(), 7.5), padding: panelPadding(), duration: 900 })
   }, [selected, store, ready])
 
   // Theme: swap the basemap only when the theme really changes. Re-setting the
@@ -191,6 +194,10 @@ export function MapView() {
     const corridorPaths = timeline.corridors.map((c) => ({ id: c.id, path: pathBetween(c, 0, c.lengthKm) }))
     const deadZones = timeline.corridors.flatMap((c) => c.deadZones.map((z) => ({ name: z.name, path: pathBetween(c, z.fromKm, z.toKm) })))
     const depots = timeline.corridors.flatMap((c) => c.stations.filter((s) => s.depot).map((s) => ({ name: s.name, position: [s.lon, s.lat] as LngLat })))
+    // Customer drops on city rounds: what a multi-drop route is made of.
+    const customers = timeline.corridors
+      .filter((c) => c.kind === 'urban')
+      .flatMap((c) => c.stations.filter((s) => !s.depot).map((s) => ({ name: s.name, type: s.type ?? 'stop', window: s.window, position: [s.lon, s.lat] as LngLat })))
     const aspectOf = (v: AnimatedVehicle) => shipmentsRef.current.get(v.vehicle.vehicleId)?.risk.aspect ?? 'clear'
 
     const staticLayers = (p: Palette) => [
@@ -207,13 +214,16 @@ export function MapView() {
         extensions: [new PathStyleExtension({ dash: true })],
         pickable: true,
       }),
+      new ScatterplotLayer({ id: 'customers', data: customers, getPosition: (d) => d.position, getRadius: 5, radiusUnits: 'pixels', getFillColor: [...p.surface, 255], getLineColor: [...p.ink3, 255], lineWidthUnits: 'pixels', getLineWidth: 2, stroked: true, pickable: true }),
       new ScatterplotLayer({ id: 'depots', data: depots, getPosition: (d) => d.position, getRadius: 6, radiusUnits: 'pixels', getFillColor: [...p.surface, 255], getLineColor: [...p.ink, 255], lineWidthUnits: 'pixels', getLineWidth: 2, stroked: true, pickable: true }),
     ]
     let statics = staticLayers(palette)
 
     const tooltip = ({ object, layer }: { object?: unknown; layer?: { id: string } | null }) => {
       if (!object || !layer) return null
-      const o = object as { name?: string; vehicle?: AnimatedVehicle['vehicle'] }
+      const o = object as { name?: string; type?: string; window?: string; vehicle?: AnimatedVehicle['vehicle'] }
+      if (layer.id === 'customers') return { text: `${o.name}
+${(o.type ?? 'stop').replace('_', ' ')}${o.window ? ` · delivery window ${o.window}` : ''}`, className: 'map-tooltip' }
       if (layer.id === 'dead-zones') return { text: `${o.name}: no signal`, className: 'map-tooltip' }
       if (layer.id === 'depots') return { text: `${o.name} depot: cold storage`, className: 'map-tooltip' }
       const v = o.vehicle

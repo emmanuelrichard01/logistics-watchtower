@@ -61,7 +61,8 @@ export function LanesView() {
                   <SignalHead aspect={worstAspect} size={0.8} />
                   <h2 id={`lane-${corridor.id}`}>{corridor.name}</h2>
                   <p className="lane__meta num">
-                    {items.length} shipments · {corridor.lengthKm} km
+                    {corridor.kind === 'urban' ? `City round · ${corridor.city} · ` : ''}
+                    {items.length} {items.length === 1 ? 'vehicle' : 'vehicles'} · {corridor.lengthKm} km
                     {attention.length > 0 && <span className="lane__attention"> · {attention.length} need attention</span>}
                   </p>
                 </header>

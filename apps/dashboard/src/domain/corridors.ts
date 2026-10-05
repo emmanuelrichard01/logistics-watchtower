@@ -90,23 +90,49 @@ function build(raw: (typeof RAW)[number]): Corridor {
 
 export const CORRIDORS: Corridor[] = RAW.map(build)
 
-/** Position along a corridor: linear between stations (good enough for the schematic). */
+function bearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = Math.PI / 180
+  const y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r)
+  const x = Math.cos(lat1 * r) * Math.sin(lat2 * r) - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos((lon2 - lon1) * r)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
+/** Position along a corridor: on the real road when geometry exists, else between stations. */
 export function positionAt(corridor: Corridor, km: number): { lat: number; lon: number; headingDeg: number } {
-  const s = corridor.stations
   const clamped = Math.max(0, Math.min(corridor.lengthKm, km))
+  if (corridor.path && corridor.pathKm && corridor.path.length > 1) {
+    const ks = corridor.pathKm
+    let lo = 0
+    let hi = ks.length - 1
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      if (ks[mid] <= clamped) lo = mid
+      else hi = mid
+    }
+    const [lonA, latA] = corridor.path[lo]
+    const [lonB, latB] = corridor.path[hi]
+    const f = ks[hi] === ks[lo] ? 0 : (clamped - ks[lo]) / (ks[hi] - ks[lo])
+    return { lat: latA + (latB - latA) * f, lon: lonA + (lonB - lonA) * f, headingDeg: bearing(latA, lonA, latB, lonB) }
+  }
+  const s = corridor.stations
   let i = 0
   while (i < s.length - 2 && s[i + 1].km < clamped) i++
   const a = s[i]
   const b = s[i + 1]
   const f = b.km === a.km ? 0 : (clamped - a.km) / (b.km - a.km)
-  const lat = a.lat + (b.lat - a.lat) * f
-  const lon = a.lon + (b.lon - a.lon) * f
-  const y = Math.sin(((b.lon - a.lon) * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180)
-  const x =
-    Math.cos((a.lat * Math.PI) / 180) * Math.sin((b.lat * Math.PI) / 180) -
-    Math.sin((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.cos(((b.lon - a.lon) * Math.PI) / 180)
-  const headingDeg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
-  return { lat, lon, headingDeg }
+  return { lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, headingDeg: bearing(a.lat, a.lon, b.lat, b.lon) }
+}
+
+/** Cumulative km per vertex, scaled so the end matches the route's stated length. */
+export function cumulativeKm(path: [number, number][], lengthKm: number): number[] {
+  const out = [0]
+  for (let i = 1; i < path.length; i++) {
+    const [lon1, lat1] = path[i - 1]
+    const [lon2, lat2] = path[i]
+    out.push(out[i - 1] + haversineKm(lat1, lon1, lat2, lon2))
+  }
+  const total = out[out.length - 1] || 1
+  return out.map((k) => (k / total) * lengthKm)
 }
 
 export function inDeadZone(corridor: Corridor, km: number): string | null {

@@ -1843,3 +1843,15 @@ kbd {
     display: none;
   }
 }
+
+/* Long stop names (city rounds) stay on one line; the full name is in the title. */
+.trip-progress__labels span {
+  min-width: 0;
+  max-width: 34%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trip-progress__labels span:last-child {
+  text-align: right;
+}

@@ -4,7 +4,7 @@
 
 The console answers one question first: **which shipment will breach soonest, how sure are we, and what should I do?** It runs on desktop, tablet and phone with the same workflow (ADR-0010).
 
-Today it runs on a **seeded synthetic timeline**: 14 trucks, three corridors, three simulated hours. Shipments, values and drivers are all synthetic. The data contract it consumes is the one the API stream will deliver (see [Data contract](#data-contract)).
+By default it replays **simulator recordings** (`apps/dashboard-fixtures`): four inter-state trucks (one with a degrading compressor) and three Lagos city vehicles on multi-drop rounds, time-aligned into one shift, on real OSRM road and street geometry. Readings become visible only when the gateway would have received them, so dead zones show as estimates. `?data=synthetic` switches to the seeded synthetic fleet (14 trucks, three corridors, scripted scenarios). Everything is synthetic. Both sources feed the data contract the API stream will deliver (see [Data contract](#data-contract)).
 
 - **Code:** `apps/dashboard`
 - **Design brief:** [`docs/design/console.md`](../design/console.md)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ESTIMATE_AFTER_S } from './frames'
 import { buildSyntheticTimeline } from './synthetic'
 
 const tl = buildSyntheticTimeline()
@@ -55,6 +56,6 @@ describe('synthetic timeline', () => {
   })
 
   it('never shows a projected position as a live fix', () => {
-    expect(all((t) => tl.frameAt(t).vehicles.every((v) => v.estimated === v.lastFixAgeS > 0))).toBe(true)
+    expect(all((t) => tl.frameAt(t).vehicles.every((v) => v.estimated === v.lastFixAgeS > ESTIMATE_AFTER_S))).toBe(true)
   })
 })

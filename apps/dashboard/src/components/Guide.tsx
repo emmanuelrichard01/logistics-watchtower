@@ -15,7 +15,7 @@ const ASPECTS: { aspect: Aspect; detail: string }[] = [
 ]
 
 const SHORTCUTS: [string, string][] = [
-  ['⌘K', 'Search trucks, incidents and commands'],
+  ['⌘K', 'Search vehicles, incidents and commands'],
   ['L', 'Jump back to live'],
   ['Esc', 'Close the open panel'],
   ['J / K', 'Move through incidents'],

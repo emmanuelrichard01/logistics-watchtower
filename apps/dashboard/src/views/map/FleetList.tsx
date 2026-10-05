@@ -23,13 +23,13 @@ export function FleetList() {
       <header className="fleet-list__head">
         <h2>Fleet</h2>
         <p className="num">
-          {view.shipments.length} trucks · {attention} need attention
+          {view.shipments.length} vehicles · {attention} need attention
         </p>
       </header>
       <label className="field">
         <Search size={15} aria-hidden="true" />
-        <span className="visually-hidden">Filter trucks</span>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Truck, cargo or destination" />
+        <span className="visually-hidden">Filter vehicles</span>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Vehicle, cargo or destination" />
       </label>
       <ul className="fleet-list__rows">
         {rows.map((s) => {

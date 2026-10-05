@@ -40,8 +40,8 @@ function initialTheme(): 'light' | 'dark' {
 }
 
 export function createStore(timeline: Timeline) {
-  // Start partway in so the board has history to show.
-  const liveStart = timeline.start + 95 * 60_000
+  // Start partway in so the board has history to show, leaving most of the run live.
+  const liveStart = timeline.start + Math.min(95 * 60_000, (timeline.end - timeline.start) * 0.4)
   let state: State = {
     playhead: liveStart - ((liveStart - timeline.start) % timeline.stepMs),
     mode: 'live',

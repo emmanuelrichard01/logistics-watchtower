@@ -72,11 +72,11 @@ export function CommandPalette() {
       <div className="palette__box">
         <label className="palette__input">
           <Search size={17} aria-hidden="true" />
-          <span className="visually-hidden">Search trucks, incidents, views and commands</span>
+          <span className="visually-hidden">Search vehicles, incidents, views and commands</span>
           <input
             autoFocus
             value={q}
-            placeholder="Search trucks, incidents, views…"
+            placeholder="Search vehicles, incidents, views…"
             onChange={(e) => {
               setQ(e.target.value)
               setIndex(0)

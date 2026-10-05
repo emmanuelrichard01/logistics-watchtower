@@ -6,6 +6,8 @@ export default defineConfig({
   // MapLibre loads its worker from a sibling file; pre-bundling moves the
   // module into .vite/deps and breaks that relative URL.
   optimizeDeps: { exclude: ['maplibre-gl'] },
+  // The simulator fixtures live next to the console in apps/dashboard-fixtures.
+  server: { fs: { allow: ['..'] } },
   // MapLibre starts its worker as a module worker.
   worker: { format: 'es' },
   build: {

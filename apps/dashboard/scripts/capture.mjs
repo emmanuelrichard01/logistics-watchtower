@@ -13,6 +13,7 @@ const shots = [
   { name: 'desktop-dark', path: '/', vp: { width: 1440, height: 900 }, theme: 'dark' },
   { name: 'desktop-layer', path: '/', vp: { width: 1440, height: 900 }, theme: 'light', click: '.tag--danger, .tag--caution1, .tag--caution2' },
   { name: 'desktop-map', path: '/map', vp: { width: 1440, height: 900 }, theme: 'light', wait: 4500, click: '.fleet-row' },
+  { name: 'desktop-map-city', path: '/map', vp: { width: 1440, height: 900 }, theme: 'light', wait: 4500, click: '.fleet-row:has-text("VAN-LAG1")' },
   { name: 'desktop-map-dark', path: '/map', vp: { width: 1440, height: 900 }, theme: 'dark', wait: 4500 },
   { name: 'desktop-incidents', path: '/incidents', vp: { width: 1440, height: 900 }, theme: 'light' },
   { name: 'desktop-health', path: '/health', vp: { width: 1440, height: 900 }, theme: 'light' },
@@ -37,7 +38,7 @@ for (const s of shots) {
   if (s.click) {
     const el = page.locator(s.click).first()
     if (await el.count()) await el.click()
-    await page.waitForTimeout(1500)
+    await page.waitForTimeout(s.name.includes('city') ? 4000 : 1500)
   }
   await page.screenshot({ path: `${out}/${s.name}.png`, fullPage: false })
   console.log(`${s.name}: ${errors.length ? 'ERRORS ' + errors.slice(0, 3).join(' | ') : 'ok'}`)

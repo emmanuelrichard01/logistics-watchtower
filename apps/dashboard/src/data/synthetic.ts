@@ -2,21 +2,9 @@
 // shipments or values). Replaced by simulator recordings (apps/dashboard-fixtures)
 // and later by the API stream; all three produce the same Timeline contract.
 
-import { CORRIDORS, inDeadZone, positionAt } from '../domain/corridors'
-import { assessRisk } from '../domain/risk'
-import type {
-  Aspect,
-  CargoProfile,
-  Frame,
-  Incident,
-  IncidentType,
-  ProbeStatus,
-  SeriesPoint,
-  Severity,
-  Shipment,
-  Timeline,
-  VehicleState,
-} from '../domain/types'
+import { CORRIDORS, inDeadZone } from '../domain/corridors'
+import type { CargoProfile, Timeline } from '../domain/types'
+import { buildTimeline, type Truth } from './frames'
 
 const STEP_MS = 15_000
 const DT_MIN = STEP_MS / 60_000
@@ -78,13 +66,6 @@ const FLEET: Spec[] = [
   { vehicleId: 'TRK-114', corridorId: 'RT-LAG-ABJ', startFrac: 0.85, speed: 57, profile: PROFILES.chicken, script: {} },
 ]
 
-interface Truth extends SeriesPoint {
-  receivedAt: number
-  km: number
-  speed: number
-  compressor: VehicleState['compressor']
-  cargoProbe: ProbeStatus
-}
 
 function ambientC(tMs: number): number {
   const hourWat = ((tMs / 3_600_000 + 1) % 24 + 24) % 24
@@ -149,7 +130,6 @@ function simulateTruck(spec: Spec, seed: number): Truth[] {
       supplyAirC: ta - (cooling && !defrost ? 2.2 * h : 0) + noise(0.15),
       door: doorOpen,
       defrost,
-      gap: false,
       compressor: fault ? 'FAULT' : cooling && !defrost ? 'RUNNING' : 'OFF',
       cargoProbe: stuck && min >= s.stuckProbeFromMin! + 12 ? 'suspect' : 'ok',
     })
@@ -157,168 +137,24 @@ function simulateTruck(spec: Spec, seed: number): Truth[] {
   return out
 }
 
-const SEVERITY_FOR: Record<Aspect, Severity | null> = {
-  danger: 'CRITICAL',
-  caution1: 'CRITICAL',
-  caution2: 'HIGH',
-  unknown: null,
-  clear: null,
-}
-
-const ACTIONS: Record<IncidentType, string[]> = {
-  CARGO_TEMP_BREACH: ['Divert to nearest cold store', 'Call driver', 'Transfer cargo'],
-  BREACH_FORECAST: ['Call driver', 'Switch to genset power', 'Divert to nearest cold store'],
-  DOOR_OPEN_MOVING: ['Call driver', 'Check door seal'],
-  SENSOR_FAULT: ['Schedule probe check', 'Call driver to read the unit display'],
-  TELEMETRY_GAP: ['Wait for coverage', 'Call driver'],
-  COMPRESSOR_FAULT: ['Call driver', 'Switch to genset power', 'Divert to nearest cold store'],
-}
-
 export function buildSyntheticTimeline(seed = 20261005): Timeline {
-  const truths = new Map(FLEET.map((spec, i) => [spec.vehicleId, simulateTruck(spec, seed + i * 7919)]))
-  const frames: Frame[] = []
-  const markers: Timeline['markers'] = []
-  const live = new Map<string, Incident>() // dedup key -> incident
-  const quietSince = new Map<string, number>()
-  const lastAspect = new Map<string, Aspect>()
-
-  for (let i = 0; i < STEPS; i++) {
-    const t = START + i * STEP_MS
-    const vehicles: VehicleState[] = []
-    const shipments: Shipment[] = []
-    const active = new Map<string, { type: IncidentType; severity: Severity; summary: string; since: number; vehicleId: string; shipmentId: string }>()
-
-    FLEET.forEach((spec, n) => {
-      const truth = truths.get(spec.vehicleId)!
+  return buildTimeline({
+    start: START,
+    stepMs: STEP_MS,
+    steps: STEPS,
+    corridors: CORRIDORS,
+    provenance: 'Simulated fleet (synthetic)',
+    vehicles: FLEET.map((spec, n) => {
       const corridor = CORRIDORS.find((c) => c.id === spec.corridorId)!
-      // What the console knows at time t: the newest reading received by then.
-      let k = i
-      while (k > 0 && truth[k].receivedAt > t) k--
-      const known = truth[k]
-      const ageS = (t - known.t) / 1000
-      const estimated = ageS > 0
-      const km = estimated ? Math.min(corridor.lengthKm, known.km + (known.speed / 3600) * ageS) : known.km
-      const pos = positionAt(corridor, km)
-      const vehicle: VehicleState = {
+      return {
         vehicleId: spec.vehicleId,
         corridorId: spec.corridorId,
-        km,
-        lat: pos.lat,
-        lon: pos.lon,
-        speedKmh: known.speed,
-        headingDeg: pos.headingDeg,
-        cargoC: known.cargoC,
-        returnAirC: known.returnAirC,
-        supplyAirC: known.supplyAirC,
-        setpointC: spec.profile.setpointC,
-        door: known.door ? 'OPEN' : 'CLOSED',
-        compressor: known.compressor,
-        defrost: known.defrost,
-        lastFixAgeS: ageS,
-        estimated,
-        probes: { cargo: known.cargoProbe, returnAir: 'ok', supplyAir: 'ok' },
+        profile: spec.profile,
+        shipmentId: `SHP-${24100 + n * 37}`,
+        destination: corridor.stations.at(-1)!.name,
+        cruiseKmh: spec.speed,
+        truth: simulateTruck(spec, seed + n * 7919),
       }
-      const recent = truth
-        .slice(Math.max(0, k - 80), k + 1)
-        .filter((p) => p.receivedAt <= t && p.cargoC !== null)
-        .map((p) => ({ tMin: (p.t - START) / 60_000, c: p.cargoC as number }))
-      const remainingKm = corridor.lengthKm - km
-      let lastDefrost = -1
-      for (let j = k; j >= Math.max(0, k - 120); j--) if (truth[j].defrost && truth[j].receivedAt <= t) { lastDefrost = j; break }
-      const minutesSinceDefrost = lastDefrost < 0 ? Number.POSITIVE_INFINITY : (known.t - truth[lastDefrost].t) / 60_000
-      const risk = assessRisk(vehicle, spec.profile, recent, (remainingKm / Math.max(30, spec.speed)) * 60, minutesSinceDefrost)
-      const shipmentId = `SHP-${24100 + n * 37}`
-      vehicles.push(vehicle)
-      shipments.push({ id: shipmentId, vehicleId: spec.vehicleId, cargo: spec.profile, destination: corridor.stations.at(-1)!.name, risk })
-
-      if (lastAspect.get(spec.vehicleId) !== risk.aspect && risk.aspect !== 'clear') {
-        markers.push({ t, aspect: risk.aspect, vehicleId: spec.vehicleId })
-      }
-      lastAspect.set(spec.vehicleId, risk.aspect)
-
-      const sev = SEVERITY_FOR[risk.aspect]
-      const range = risk.ttbP10Min === null ? '' : `, breach in ${risk.ttbP10Min}–${risk.ttbP90Min} min`
-      const cargoTxt = vehicle.cargoC === null ? 'cargo unknown' : `cargo ${vehicle.cargoC.toFixed(1)} °C`
-      if (risk.aspect === 'danger') {
-        // Event-time start: the first reading above the limit, even if it arrived late.
-        const first = truth.findIndex((p, j) => j <= k && p.receivedAt <= t && (p.cargoC ?? -99) > spec.profile.maxC)
-        active.set(`${spec.vehicleId}:CARGO_TEMP_BREACH`, { type: 'CARGO_TEMP_BREACH', severity: 'CRITICAL', summary: `${cargoTxt}, limit ${spec.profile.maxC} °C`, since: truth[Math.max(0, first)].t, vehicleId: spec.vehicleId, shipmentId })
-      } else if (sev) {
-        active.set(`${spec.vehicleId}:BREACH_FORECAST`, { type: 'BREACH_FORECAST', severity: sev, summary: `${cargoTxt}${range}`, since: t, vehicleId: spec.vehicleId, shipmentId })
-      }
-      if (vehicle.door === 'OPEN' && vehicle.speedKmh > 5) {
-        active.set(`${spec.vehicleId}:DOOR_OPEN_MOVING`, { type: 'DOOR_OPEN_MOVING', severity: 'CRITICAL', summary: `Door open at ${Math.round(vehicle.speedKmh)} km/h`, since: t, vehicleId: spec.vehicleId, shipmentId })
-      }
-      if (vehicle.probes.cargo !== 'ok') {
-        active.set(`${spec.vehicleId}:SENSOR_FAULT`, { type: 'SENSOR_FAULT', severity: 'MEDIUM', summary: 'Cargo probe flat while air probes warm', since: t, vehicleId: spec.vehicleId, shipmentId })
-      }
-      if (ageS > 300) {
-        const zone = inDeadZone(corridor, km) ?? 'coverage gap'
-        active.set(`${spec.vehicleId}:TELEMETRY_GAP`, { type: 'TELEMETRY_GAP', severity: 'LOW', summary: `No signal for ${Math.round(ageS / 60)} min (${zone})`, since: known.t, vehicleId: spec.vehicleId, shipmentId })
-      }
-      if (vehicle.compressor === 'FAULT') {
-        active.set(`${spec.vehicleId}:COMPRESSOR_FAULT`, { type: 'COMPRESSOR_FAULT', severity: 'CRITICAL', summary: 'Compressor fault code reported', since: t, vehicleId: spec.vehicleId, shipmentId })
-      }
-    })
-
-    for (const [key, a] of active) {
-      const existing = live.get(key)
-      if (existing && existing.state !== 'AUTO_CLEARED') {
-        existing.severity = a.severity
-        existing.summary = a.summary
-        existing.lastSeenAt = t
-        // Dedup counts re-triggers after a quiet spell, not every reading.
-        if (quietSince.has(key)) existing.occurrences += 1
-      } else {
-        live.set(key, {
-          id: `INC-${key.replace(':', '-')}-${Math.round((a.since - START) / 60_000)}`,
-          type: a.type,
-          severity: a.severity,
-          state: 'OPEN',
-          vehicleId: a.vehicleId,
-          shipmentId: a.shipmentId,
-          openedAt: a.since,
-          lastSeenAt: t,
-          occurrences: 1,
-          summary: a.summary,
-          actions: ACTIONS[a.type],
-        })
-      }
-      quietSince.delete(key)
-    }
-    for (const [key, inc] of live) {
-      if (active.has(key) || inc.state === 'AUTO_CLEARED') continue
-      const since = quietSince.get(key) ?? t
-      quietSince.set(key, since)
-      if (t - since >= 5 * 60_000) inc.state = 'AUTO_CLEARED'
-    }
-    // Snapshot copies: frames are immutable history.
-    const incidents = [...live.values()]
-      .filter((inc) => inc.state !== 'AUTO_CLEARED' || t - inc.lastSeenAt < 20 * 60_000)
-      .map((inc) => ({ ...inc }))
-    frames.push({ t, vehicles, shipments, incidents })
-  }
-
-  return {
-    start: START,
-    end: START + (STEPS - 1) * STEP_MS,
-    stepMs: STEP_MS,
-    corridors: CORRIDORS,
-    markers,
-    provenance: 'Simulated fleet (synthetic)',
-    frameAt(t: number) {
-      const idx = Math.max(0, Math.min(STEPS - 1, Math.round((t - START) / STEP_MS)))
-      return frames[idx]
-    },
-    series(vehicleId: string, from: number, to: number) {
-      const truth = truths.get(vehicleId) ?? []
-      return truth
-        .filter((p) => p.t >= from && p.t <= to)
-        .map((p) =>
-          p.receivedAt <= to
-            ? { t: p.t, cargoC: p.cargoC, returnAirC: p.returnAirC, supplyAirC: p.supplyAirC, door: p.door, defrost: p.defrost, gap: false }
-            : { t: p.t, cargoC: null, returnAirC: null, supplyAirC: null, door: false, defrost: false, gap: true },
-        )
-    },
-  }
+    }),
+  })
 }

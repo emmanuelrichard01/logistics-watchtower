@@ -117,7 +117,7 @@ Real decisions, with their trade-offs:
 - **The stream is only half built.** The gateway is built and produces to `wt.input.v1`, and the processor's core exists as a pure, tested function. But the stream shell that runs that core, the projector, the API and the archiver are still designed, not built, so nothing consumes the input log yet.
 - **CI has not run remotely.** The workflow exists, and the same checks pass locally.
 - **One laptop, single node.** The performance numbers come from one Windows laptop with integrated graphics and a single-node broker. Nothing here is a production claim.
-- **Straight-line corridors in the console.** The simulator now has real OSRM road geometry, but the console still joins town coordinates with straight lines until it switches to the simulator's fixtures.
+- **The console replays recordings, not a live stream.** It plays two time-aligned simulator recordings (four inter-state trucks with a degrading compressor, and Lagos city rounds in the morning rush) on real OSRM road and street geometry. Its time-to-breach is a provisional client-side estimate until the processor's risk assessments are streamed. Sensor-trust flags wait for probe-level fields in the recordings.
 - **The plan is the plan.** The 14-week schedule is a target, and the [plan](plan/Logistics%20Watchtower%202.0%20Rebuild%20Plan.md) states its own risks.
 
 ## Author
