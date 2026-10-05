@@ -10,7 +10,7 @@ Solo 12-week rebuild (5 Oct to 27 Dec 2026). `plan/Logistics Watchtower 2.0 Rebu
 
 ## Rules
 
-- `packages/domain` is pure: no Kafka, Postgres, HTTP or other I/O imports, and pyright strict. It's guarded by `tests/unit/test_domain_purity.py` until the import-linter contract lands.
+- `packages/domain` is pure and deterministic: stdlib only, with no I/O, clock or random imports, and pyright strict. `tests/unit/test_domain_purity.py` enforces this with an allowlist. Time comes only from event data.
 - Honest claims: no number goes in the README unless a committed benchmark produced it. Unmeasured figures are labelled targets.
 - Tier 2 items (plan section 2) are never built. Any new component must pass the admission test in ADR-0001.
 - Every new component arrives with a test (and a metric, once metrics exist) in the same commit.
