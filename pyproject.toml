@@ -8,6 +8,8 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "fastavro>=1.12.2",
+    "hypothesis>=6.168.4",
     "pre-commit>=4",
     "pyright>=1.1.400",
     "pytest>=8",
@@ -33,7 +35,7 @@ pythonVersion = "3.12"
 include = ["packages", "tests"]
 exclude = ["legacy", "**/.venv", "**/__pycache__"]
 typeCheckingMode = "standard"
-strict = ["packages/domain"]
+strict = ["packages/contracts", "packages/domain"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

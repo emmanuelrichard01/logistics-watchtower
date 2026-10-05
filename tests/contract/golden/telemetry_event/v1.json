@@ -1,0 +1,24 @@
+{
+  "event_id": "e6970414-38f9-566d-86aa-fa98b086dc4e",
+  "schema_version": 1,
+  "vehicle_id": "TRK-101",
+  "device_id": "EDGE-0101",
+  "boot_id": "b-20261005-0412",
+  "seq": 18273,
+  "event_time": "2026-10-05T07:12:03.250+00:00",
+  "ingest_time": "2026-10-05T07:12:41.900+00:00",
+  "position": {"lat": 7.3768, "lon": 3.9398, "speed_kmh": 85.3, "heading_deg": 42.7, "gps_fix": "FIX_3D", "hdop": 1.1},
+  "reefer": {
+    "setpoint_c": -20.0,
+    "supply_air_c": -21.4,
+    "return_air_c": -19.8,
+    "cargo_probe_c": -19.1,
+    "compressor": "RUNNING",
+    "fault_code": null,
+    "defrost": false,
+    "power_source": "ENGINE",
+    "door": "CLOSED"
+  },
+  "vehicle": {"fuel_pct": 68.2, "battery_v": 13.8, "ambient_c": 33.5},
+  "link": {"signal_dbm": -87, "buffered": true}
+}
