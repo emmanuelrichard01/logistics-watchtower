@@ -41,6 +41,7 @@ from watchtower_simulator.operations import (
     FleetPolicy,
     Operations,
     road_features,
+    urban_congestion,
 )
 from watchtower_simulator.reefer import Reefer, ReeferParams
 from watchtower_simulator.rounds import DeliveryRound, log_entry, plan_round
@@ -554,8 +555,11 @@ class Simulation:
         if stopped:
             v.target_kmh = 0.0
         elif now % 60_000 == 0 or v.target_kmh == 0.0:
-            low, high = v.vclass.speed_bands[v.route.segment(v.km).road_class]
+            road_class = v.route.segment(v.km).road_class
+            low, high = v.vclass.speed_bands[road_class]
             target = v.motion.uniform(low, high)
+            if v.route.kind == "urban":
+                target *= urban_congestion(v.route.city, road_class, now)
             if ops is not None:
                 target = ops.target_speed(target, v.route, v.km, now)
             v.target_kmh = target * (v.cond.speed_factor if v.cond else 1.0)
@@ -626,6 +630,9 @@ class Simulation:
         if stop is None or v.km < stop.km:
             return
         r.next_index += 1
+        receivers = {x.receiver for x in v.shipments if x.receiver}
+        if receivers and stop.stop_id not in receivers:
+            return  # nothing for this customer on this vehicle: drive on
         v.km = stop.km
         dwell_s, door_s = sample_drop(stop.stop_type, v.ops)
         v.stop = Stop(

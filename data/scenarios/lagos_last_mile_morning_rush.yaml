@@ -1,0 +1,40 @@
+# Monday morning in Lagos. VAN-LAG1 leaves the Ikeja hub for the Island over Third Mainland
+# Bridge in the rush; VAN-LAG2 works the Apapa-Ikorodu Road round; TRIKE-LAG3 takes one small
+# order to a quick-service restaurant in Fadeyi. Traffic, not the reefer, is the story: late
+# windows on the Island, and long door-open drops that a small van has to recover from.
+# Correct behaviour: lateness against windows reported per stop; temperatures recover between
+# drops without an alert storm.
+name: lagos_last_mile_morning_rush
+seed: 1301
+start: 2026-10-05T05:15:00Z   # Monday 06:15 WAT
+duration: 6h
+named_dead_zones: false
+fleet:
+  - vehicle_id: VAN-LAG1
+    route: LAG-U1
+    vehicle_class: van
+    setpoint_c: 4.0
+    dispatch_after: 25m
+    shipments:
+      - {id: SHP-LAG-101, profile: fresh_produce, kg: 220, receiver: LAG-U1-01, packaging: carton}
+      - {id: SHP-LAG-102, profile: pharma_2_8, kg: 40, receiver: LAG-U1-02, packaging: insulated_box}
+      - {id: SHP-LAG-103, profile: fresh_produce, kg: 260, receiver: LAG-U1-03, packaging: carton}
+      - {id: SHP-LAG-104, profile: fresh_produce, kg: 120, receiver: LAG-U1-04, packaging: carton}
+      - {id: SHP-LAG-105, profile: fresh_produce, kg: 90, receiver: LAG-U1-05, packaging: carton}
+  - vehicle_id: VAN-LAG2
+    route: LAG-U2
+    vehicle_class: van
+    setpoint_c: 4.0
+    dispatch_after: 15m
+    shipments:
+      - {id: SHP-LAG-201, profile: fresh_produce, kg: 180, receiver: LAG-U2-01, packaging: carton}
+      - {id: SHP-LAG-202, profile: fresh_produce, kg: 90, receiver: LAG-U2-02, packaging: carton}
+      - {id: SHP-LAG-203, profile: pharma_2_8, kg: 30, receiver: LAG-U2-03, packaging: insulated_box}
+      - {id: SHP-LAG-204, profile: fresh_produce, kg: 200, receiver: LAG-U2-04, packaging: carton}
+  - vehicle_id: TRIKE-LAG3
+    route: LAG-U2
+    vehicle_class: trike
+    setpoint_c: 4.0
+    dispatch_after: 10m
+    shipments:
+      - {id: SHP-LAG-301, profile: fresh_produce, kg: 35, receiver: LAG-U2-02, packaging: carton}

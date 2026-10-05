@@ -118,6 +118,24 @@ def congestion_factor(route: Route, km: float, t_ms: int) -> float:
     return max(0.2, 1.0 - load)
 
 
+# City traffic severity (illustrative): Lagos is the benchmark for gridlock.
+CITY_TRAFFIC = {"Lagos": 1.0, "Port Harcourt": 0.6, "Abuja": 0.45}
+# Speed lost to traffic by (slow corridor?, rush hour?) at full severity, illustrative.
+URBAN_LOAD = {(False, False): 0.2, (False, True): 0.55, (True, False): 0.35, (True, True): 0.8}
+
+
+def urban_congestion(city: str | None, road_class: str, t_ms: int) -> float:
+    """Speed multiplier inside a city by time of day. Lagos rush hours start early and run
+    late; slow corridors (Third Mainland Bridge, Ikorodu Road) crawl at the peaks."""
+    severity = CITY_TRAFFIC.get(city or "", 0.5)
+    hour = local_hour(t_ms)
+    if to_datetime(t_ms).weekday() >= 5:
+        severity *= 0.5
+    rush = (6.5 <= hour < 10.0) or (16.0 <= hour < 20.5)
+    load = URBAN_LOAD[(road_class == "slow_corridor", rush)]
+    return max(0.12, 1.0 - load * severity)
+
+
 @dataclass(frozen=True)
 class StopRequest:
     stop_type: str
