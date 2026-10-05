@@ -87,6 +87,8 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `cargo_c` | number | True cargo (product) temperature, the one that spoils |
 | `air_c` | number | Return-air temperature (box air) |
 | `supply_air_c` | number | Air leaving the evaporator |
+| `cargo_probe_c`, `return_air_probe_c`, `supply_air_probe_c` | number or null | **What the device reported** in its latest sample: sensor noise, calibration offset and every active fault (flatline, spike, drift, swap) applied; null on probe dropout. Run sensor-trust and alert logic on these, never on the true values |
+| `probe_t` | string or null | When that sample was taken (up to one reporting interval old; null before the first sample or while the tracker is cut) |
 | `ambient_c` | number | Outside air temperature |
 | `sun_elevation_deg`, `irradiance_w_m2`, `cloud_cover` | number | Sun height, global horizontal irradiance, cloud fraction 0-1 |
 | `storm` | boolean | A rainy-season storm over this truck (cooler air, slower traffic, a flakier link) |
@@ -106,6 +108,17 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `buffered` | boolean | The device is holding unsent readings |
 | `buffer_depth` | integer | How many readings it is holding |
 | `last_fix_age_s` | integer or null | Seconds since the freshest reading the gateway has received. This is how stale the server's view is; draw estimates, not measurements, when it grows |
+
+### Ground truth versus what a device can report
+
+The recording mixes both. A real device can't report these, so a console must never base an alert, a confidence figure or a sensor-trust verdict on them. Use them only to check whether the console got it right:
+
+- the true temperatures: `cargo_c`, `air_c`, `supply_air_c` and each shipment's `cargo_c`;
+- `compressor_health`, `capacity_factor`, `evaporator_ice_kg`;
+- `faults` (which faults are injected), `off_route_km`, `storm`, `solar_heat_kw`, `irradiance_w_m2`, `cloud_cover`;
+- `link_up` from the device's side during an outage (the server only sees silence), `buffer_depth`.
+
+The device-reported fields are the `*_probe_c` set and `probe_t`, position, speed, heading, door, compressor state and fault code, defrost, power source, fuel, battery and signal. The telemetry readings stream carries exactly these.
 
 ## Stop visit (`*.stops.jsonl`)
 

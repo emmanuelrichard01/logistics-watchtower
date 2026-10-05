@@ -128,6 +128,7 @@ class VehicleSim:
     faults: list[Fault] = field(default_factory=lambda: [])
     detour: Detour | None = None  # hijacked off the corridor
     round: DeliveryRound | None = None  # urban multi-drop round
+    last_probes: tuple[int, dict[str, Any]] | None = None  # (sample time, reefer as reported)
     open_truth: dict[str, int] = field(default_factory=lambda: {})
 
     _pos_km: float = field(default=-1.0, repr=False)
@@ -495,6 +496,7 @@ class Simulation:
             for fault in v.faults:
                 if fault.active(now):
                     fault.apply(reading, now, v.fault_rng)
+            v.last_probes = (now, dict(reading["reefer"]))
             reading = v.device.stamp(reading, now + self.clock_skew_ms(v, now))
             out = v.device.handle(reading, now, v.link_up, excursion)
         else:
@@ -853,6 +855,7 @@ class Simulation:
             "cargo_c": round(v.cargo_c, 2),
             "air_c": round(t.return_air_c, 2),
             "supply_air_c": round(supply_air_c(t, v.params, i), 2),
+            **self.probe_fields(v),
             "ambient_c": round(i.ambient_c, 1),
             "sun_elevation_deg": round(v.cond.sun.elevation_deg, 1) if v.cond else None,
             "irradiance_w_m2": round(v.cond.ghi_w_m2) if v.cond else None,
@@ -878,6 +881,25 @@ class Simulation:
             "last_fix_age_s": None
             if v.last_event_ms is None
             else round((now - v.last_event_ms) / 1000),
+        }
+
+    @staticmethod
+    def probe_fields(v: VehicleSim) -> dict[str, Any]:
+        """The device's latest sample as reported: noise, calibration and active faults
+        applied, null on dropout. Unlike the true temperatures, this is all a console sees."""
+        if v.last_probes is None:
+            return {
+                "probe_t": None,
+                "cargo_probe_c": None,
+                "return_air_probe_c": None,
+                "supply_air_probe_c": None,
+            }
+        at, reefer = v.last_probes
+        return {
+            "probe_t": iso(at),
+            "cargo_probe_c": reefer["cargo_probe_c"],
+            "return_air_probe_c": reefer["return_air_c"],
+            "supply_air_probe_c": reefer["supply_air_c"],
         }
 
     def track(self, v: VehicleSim, now: int, flags: dict[str, bool]) -> None:
