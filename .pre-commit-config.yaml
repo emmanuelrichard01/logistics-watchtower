@@ -14,6 +14,9 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
+        # Documentation media is deliberate and size-budgeted by
+        # apps/dashboard/scripts/media.mjs (GIF <= 6 MB, total <= 15 MB).
+        exclude: ^docs/media/
 
   # ruff comes from uv.lock, so the hook and CI can never run different versions.
   - repo: local
