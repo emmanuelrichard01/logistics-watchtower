@@ -1,4 +1,6 @@
 .DEFAULT_GOAL := help
+# Tools run as `python -m`: the .venv console-script shims get corrupted when the repo
+# lives in a synced folder (OneDrive), and `python -m` doesn't depend on them.
 .PHONY: help install lint format typecheck test test-integration check up down reset logs migrate console console-dev console-check
 
 COMPOSE := docker compose -f infra/compose/compose.yaml --profile core
@@ -8,23 +10,23 @@ help: ## List targets
 
 install: ## Sync the workspace and install git hooks
 	uv sync --all-packages
-	uv run pre-commit install
+	uv run python -m pre_commit install
 
 lint: ## Run every pre-commit hook on all files
-	uv run pre-commit run --all-files --show-diff-on-failure
+	uv run python -m pre_commit run --all-files --show-diff-on-failure
 
 format: ## Apply ruff fixes and formatting
 	uv run ruff check --fix .
 	uv run ruff format .
 
 typecheck: ## Run pyright (strict for the domain and contracts packages)
-	uv run pyright
+	uv run python -m pyright
 
 test: ## Run the fast test suite (no containers)
-	uv run pytest
+	uv run python -m pytest
 
 test-integration: ## Run integration tests against throwaway containers (needs Docker)
-	uv run pytest -m integration
+	uv run python -m pytest -m integration
 
 check: lint typecheck test ## Everything CI runs on a pull request
 
@@ -41,7 +43,7 @@ logs: ## Follow the core stack's logs
 	$(COMPOSE) logs -f --tail=100
 
 migrate: ## Apply database migrations to the core stack's Postgres
-	uv run alembic -c migrations/alembic.ini upgrade head
+	uv run python -m alembic -c migrations/alembic.ini upgrade head
 
 console-check: ## Console: lint, type check, tests and production build
 	npm --prefix apps/dashboard ci
