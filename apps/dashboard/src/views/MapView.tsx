@@ -107,6 +107,8 @@ export function MapView() {
       m.on('error', (e) => console.warn('[map]', e.error?.message ?? e))
       mapRef.current = m
       overlayRef.current = overlay
+      // Dev-only handle for probes (scripts/); never present in production builds.
+      if (import.meta.env.DEV) (window as unknown as { __wtMap?: maplibregl.Map }).__wtMap = m
       styleTheme.current = store.getState().theme
       setReady(true)
     })
