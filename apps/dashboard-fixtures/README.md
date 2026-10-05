@@ -14,6 +14,20 @@ Recorded simulator runs for developing the operator console without a running ba
 
 Current recordings:
 
+- **`console_showcase`**, the main demo fixture: a Thursday morning, 3 hours, 10 vehicles. Trucks run with the operations model on (checkpoints, tolls, congestion); vans and a trike work city rounds; one truck cross-docks to a van. Fleet recording, truth and stop log included. Every story beat lands inside the window:
+
+  | Vehicle | What happens | Look for |
+  | --- | --- | --- |
+  | TRK-101 | Compressor degrades on Lagos-Abuja; box air climbs, the cargo lags and breaches about 2.4 h in | `compressor_health`, rising `duty_cycle_pct`, `cargo_excursion` |
+  | TRK-102 | Compressor fault just before the Otukpo dead zone; the excursion starts offline | `link_down`, `buffered`, `last_fix_age_s`, a late `cargo_excursion` |
+  | TRK-103 | Cargo door open at highway speed for 8 minutes | `door_open_moving` |
+  | TRK-104 | Cargo probe flatlines; the real cargo is fine | `cargo_probe_c` stuck while `cargo_c` moves; `fault_flatline_cargo_probe` |
+  | TRK-105 | Hijacked: leaves the corridor, stops away from any depot, door opened, tracker cut | `off_route_km`, `unexplained_stop`, `tracker_offline` |
+  | TRK-106 to VAN-ABJ2 | Cross-dock at the Abuja hub | `stop_cross_dock`, `on_dock`, the van's round planned from its real dispatch |
+  | VAN-ABJ1 | Abuja pharma round; door unlatched after Maitama | `door_open_moving` on a van; SHP-ABJ-004 delivered out of spec |
+  | VAN-LAG1, TRIKE-LAG3 | Lagos rush over Third Mainland Bridge | late stops in `*.stops.jsonl` |
+
+  Its ground truth is pinned by `data/scenarios/console_showcase.labels.yaml` and checked in CI.
 - `compressor_gradual_degradation`: the first 2 hours, 4 inter-state trucks. TRK-101's compressor health falls from 1.0 to 0.2 between 07:30 and 09:00 UTC, so its air temperature climbs while the cargo lags.
 - `lagos_last_mile_morning_rush`: the first 3 hours of a Monday morning in Lagos, with two vans and a trike on city rounds (`routes.geojson`, kind `urban`); truth and stop log included.
 - `cross_dock_handover_delay`: truth and stop log only. Two trucks hand over to Abuja vans; one handover waits on a hot open dock.
@@ -34,15 +48,29 @@ If your dev server already sends `Content-Encoding: gzip` for `.gz`, `res.text()
 
 ```bash
 F=apps/dashboard-fixtures
-uv run wt-sim run compressor_gradual_degradation --duration 2h --out /tmp/r.jsonl \
+SIM="uv run python -m watchtower_simulator.cli run"   # same as wt-sim; immune to broken venv shims
+$SIM console_showcase --out /tmp/r.jsonl --recording $F/console_showcase.fleet.jsonl.gz \
+  --truth $F/console_showcase.truth.jsonl --stops $F/console_showcase.stops.jsonl
+$SIM compressor_gradual_degradation --duration 2h --out /tmp/r.jsonl \
   --recording $F/compressor_gradual_degradation.fleet.jsonl.gz --truth $F/compressor_gradual_degradation.truth.jsonl
-uv run wt-sim run lagos_last_mile_morning_rush --duration 3h --out /tmp/r.jsonl \
+$SIM lagos_last_mile_morning_rush --duration 3h --out /tmp/r.jsonl \
   --recording $F/lagos_last_mile_morning_rush.fleet.jsonl.gz --truth $F/lagos_last_mile_morning_rush.truth.jsonl \
   --stops $F/lagos_last_mile_morning_rush.stops.jsonl
-uv run wt-sim run cross_dock_handover_delay --out /tmp/r.jsonl --recording /tmp/f.jsonl \
+$SIM cross_dock_handover_delay --out /tmp/r.jsonl --recording /tmp/f.jsonl \
   --truth $F/cross_dock_handover_delay.truth.jsonl --stops $F/cross_dock_handover_delay.stops.jsonl
 uv run python -m watchtower_simulator.export_console $F/routes.geojson
 ```
+
+## Live data instead of recordings
+
+For a running demo, stream the same scenario live and drive faults from the console's chaos panel:
+
+```bash
+uv run python -m watchtower_simulator.cli live console_showcase --speed 10 \
+  --sink http://127.0.0.1:18090 --control 127.0.0.1:18091
+```
+
+The control API is `POST /inject {"vehicle", "fault", "params"}` (fault is any scenario event type, e.g. `compressor_fault`, `door_open`, `sensor_fault` with `params.fault`), `GET /fleet` (each vehicle's latest fleet row, same schema as below) and `GET /health`. CORS allows `http://localhost:5173` by default; add origins with `--cors-origin`.
 
 Output is byte-identical for the same scenario and seed, compressed files included.
 
@@ -87,6 +115,8 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `cargo_c` | number | True cargo (product) temperature, the one that spoils |
 | `air_c` | number | Return-air temperature (box air) |
 | `supply_air_c` | number | Air leaving the evaporator |
+| `cargo_probe_c`, `return_air_probe_c`, `supply_air_probe_c` | number or null | **What the device reported** in its latest sample: sensor noise, calibration offset and every active fault (flatline, spike, drift, swap) applied; null on probe dropout. Run sensor-trust and alert logic on these, never on the true values |
+| `probe_t` | string or null | When that sample was taken (up to one reporting interval old; null before the first sample or while the tracker is cut) |
 | `ambient_c` | number | Outside air temperature |
 | `sun_elevation_deg`, `irradiance_w_m2`, `cloud_cover` | number | Sun height, global horizontal irradiance, cloud fraction 0-1 |
 | `storm` | boolean | A rainy-season storm over this truck (cooler air, slower traffic, a flakier link) |
@@ -106,6 +136,17 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `buffered` | boolean | The device is holding unsent readings |
 | `buffer_depth` | integer | How many readings it is holding |
 | `last_fix_age_s` | integer or null | Seconds since the freshest reading the gateway has received. This is how stale the server's view is; draw estimates, not measurements, when it grows |
+
+### Ground truth versus what a device can report
+
+The recording mixes both. A real device can't report these, so a console must never base an alert, a confidence figure or a sensor-trust verdict on them. Use them only to check whether the console got it right:
+
+- the true temperatures: `cargo_c`, `air_c`, `supply_air_c` and each shipment's `cargo_c`;
+- `compressor_health`, `capacity_factor`, `evaporator_ice_kg`;
+- `faults` (which faults are injected), `off_route_km`, `storm`, `solar_heat_kw`, `irradiance_w_m2`, `cloud_cover`;
+- `link_up` from the device's side during an outage (the server only sees silence), `buffer_depth`.
+
+The device-reported fields are the `*_probe_c` set and `probe_t`, position, speed, heading, door, compressor state and fault code, defrost, power source, fuel, battery and signal. The telemetry readings stream carries exactly these.
 
 ## Stop visit (`*.stops.jsonl`)
 

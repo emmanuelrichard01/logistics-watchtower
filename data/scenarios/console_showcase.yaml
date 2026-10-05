@@ -1,0 +1,66 @@
+# The console's demo morning: inter-state trucks with operations on, city vans and a trike,
+# a cross-dock, and every major incident landing inside three hours.
+#   TRK-101  compressor degrading on Lagos-Abuja: air climbs, the cargo lags, then breaches
+#   TRK-102  compressor fault just before the Otukpo dead zone: the excursion starts offline
+#            and arrives late, as a buffered replay
+#   TRK-103  cargo door open at highway speed for 8 minutes
+#   TRK-104  cargo probe flatlines while the real cargo holds (sensor fault, not an excursion)
+#   TRK-105  hijacked at Jebba: leaves the corridor, unexplained stop, door opened, tracker cut
+#   TRK-106  reaches the Abuja hub and cross-docks to VAN-ABJ2, which turns up late
+#   VAN-ABJ1 Abuja pharma round with an unlatched door after Maitama
+#   VAN-LAG1, TRIKE-LAG3  Lagos morning rush over Third Mainland Bridge
+name: console_showcase
+seed: 2026
+start: 2026-03-12T07:00:00Z   # Thursday 08:00 WAT, dry-season heat, Lagos rush hour
+duration: 3h
+operations: true
+fleet_policy: {max_drive_h: 4.0, rest_min: 30}
+fleet:
+  - {vehicle_id: TRK-101, route: RT-LAG-ABJ, start_km: 95, cargo_profile: pharma_2_8, pallets: 4, initial_cargo_c: 6.2, initial_air_c: 5.5, driver: normal, thermal: {wall_ua_kw_per_k: 0.12}}
+  - {vehicle_id: TRK-102, route: RT-PHC-MKD, start_km: 402, cargo_profile: pharma_2_8, pallets: 4, initial_cargo_c: 7.4, initial_air_c: 6.5, driver: cautious}
+  - {vehicle_id: TRK-103, route: RT-BEN-ABJ, start_km: 25, cargo_profile: frozen, pallets: 20, driver: aggressive}
+  - {vehicle_id: TRK-104, route: RT-LAG-ABJ, start_km: 260, cargo_profile: frozen, pallets: 18, driver: normal}
+  - {vehicle_id: TRK-105, route: RT-LAG-ABJ, start_km: 330, cargo_profile: pharma_2_8, pallets: 8, driver: normal}
+  - vehicle_id: TRK-106
+    route: RT-BEN-ABJ
+    start_km: 575
+    driver: normal
+    cross_dock: {unload: 20m, dock_air_c: 12.0}
+    shipments:
+      - {id: SHP-106-A, profile: pharma_2_8, kg: 180, receiver: ABJ-U1-02, handover_to: VAN-ABJ2, packaging: insulated_box}
+      - {id: SHP-106-B, profile: fresh_produce, kg: 300, receiver: ABJ-U1-06, handover_to: VAN-ABJ2, packaging: carton}
+  - {vehicle_id: VAN-ABJ2, route: ABJ-U1, vehicle_class: van, setpoint_c: 5.0, handover_from: TRK-106, available_at: 95m, load: 10m}
+  - vehicle_id: VAN-ABJ1
+    route: ABJ-U1
+    vehicle_class: van
+    setpoint_c: 5.0
+    dispatch_after: 15m
+    shipments:
+      - {id: SHP-ABJ-001, profile: fresh_produce, kg: 150, receiver: ABJ-U1-01, packaging: carton}
+      - {id: SHP-ABJ-003, profile: pharma_2_8, kg: 60, receiver: ABJ-U1-03, packaging: insulated_box}
+      - {id: SHP-ABJ-004, profile: pharma_2_8, kg: 45, receiver: ABJ-U1-04, packaging: carton}
+      - {id: SHP-ABJ-005, profile: pharma_2_8, kg: 20, receiver: ABJ-U1-05, packaging: carton}
+    door_ajar: {ABJ-U1-03: 25m}
+  - vehicle_id: VAN-LAG1
+    route: LAG-U1
+    vehicle_class: van
+    setpoint_c: 4.0
+    dispatch_after: 10m
+    shipments:
+      - {id: SHP-LAG-101, profile: fresh_produce, kg: 220, receiver: LAG-U1-01, packaging: carton}
+      - {id: SHP-LAG-102, profile: pharma_2_8, kg: 40, receiver: LAG-U1-02, packaging: insulated_box}
+      - {id: SHP-LAG-103, profile: fresh_produce, kg: 260, receiver: LAG-U1-03, packaging: carton}
+      - {id: SHP-LAG-104, profile: fresh_produce, kg: 120, receiver: LAG-U1-04, packaging: carton}
+  - vehicle_id: TRIKE-LAG3
+    route: LAG-U2
+    vehicle_class: trike
+    setpoint_c: 4.0
+    dispatch_after: 5m
+    shipments:
+      - {id: SHP-LAG-301, profile: fresh_produce, kg: 35, receiver: LAG-U2-02, packaging: carton}
+events:
+  - {at: 5m, vehicle: TRK-101, type: compressor_health, to: 0.15, over: 45m}
+  - {at: 2m, vehicle: TRK-102, type: compressor_fault, code: E-COMP-01}
+  - {at: 40m, vehicle: TRK-103, type: door_open, duration: 8m}
+  - {at: 30m, vehicle: TRK-104, type: sensor_fault, fault: flatline, probe: cargo_probe}
+  - {at: 75m, vehicle: TRK-105, type: hijack, deviate_km: 12, door_open: 40m, tracker_off_after: 30m}

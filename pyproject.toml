@@ -43,6 +43,8 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "PT", "N"]
 "migrations/versions/*.py" = ["E501"]
 # A data table: one stop per line reads better than wrapped tuples.
 "apps/simulator/src/watchtower_simulator/build_urban.py" = ["E501"]
+# SVG templates: splitting the markup strings hurts more than it helps.
+"apps/simulator/src/watchtower_simulator/validation_report.py" = ["E501"]
 
 [tool.pyright]
 pythonVersion = "3.12"
