@@ -656,9 +656,12 @@ class Simulation:
     ) -> None:
         kind = STOP_TYPES[stop_type]
         v.stop = Stop(kind, now, now + int(duration_s * 1000), reason)
-        door_s = min(door_open_seconds(kind, v.ops), duration_s)
+        # The driver pulls up first: the door opens once the truck has stopped, and shuts
+        # before the stop ends, so a stop never shows a door open on the move.
+        door_s = min(door_open_seconds(kind, v.ops), duration_s - 2 * DOOR_AFTER_STOP_MS / 1000)
         if door_s > 0:
-            v.door_until_ms = now + int(door_s * 1000)
+            v.door_from_ms = now + DOOR_AFTER_STOP_MS
+            v.door_until_ms = v.door_from_ms + int(door_s * 1000)
         if stop_type == "fuel":
             v.fuel_pct = max(v.fuel_pct, v.ops.uniform(90.0, 98.0))
         if reason.startswith("drop:") and v.onboard:

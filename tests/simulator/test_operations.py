@@ -120,3 +120,9 @@ def test_checkpoint_stops_are_short_and_frequent() -> None:
         if t["end"]
     ]
     assert 60 < statistics.median(durations) < 600
+
+
+def test_operations_stops_never_open_the_door_on_the_move() -> None:
+    # Regression: the door used to open the instant a stop began, while the truck was still
+    # braking, which read as a CRITICAL door-open-while-moving at every checkpoint.
+    assert not [t for t in day().truth if t["kind"] == "door_open_moving"]
