@@ -43,7 +43,7 @@ Topics are created by a one-shot `topics-init` container **before** anything con
 
 ## Console: dev server or production build
 
-Use `make console` (the production build) for demos and any performance judgement. On the reference laptop, the map holds 59.8-59.9 fps in the production build, against 0.2-47.5 fps on the dev server ([console docs](../console/README.md#performance)). Use `make console-dev` while editing, for hot reload.
+Use `make console` (the production build) for demos and any performance judgement. On the reference laptop, the production map settles in about 6 s on a first visit and then holds about 59 fps, against 0.2-47.5 fps on the dev server ([console docs](../console/README.md#performance)). Use `make console-dev` while editing, for hot reload.
 
 ## Windows notes
 

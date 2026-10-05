@@ -1254,6 +1254,34 @@ kbd {
   font: 500 var(--fs-12) / 1.4 var(--font-sans) !important;
   white-space: pre-line;
 }
+.map-tooltip--zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.map-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.map-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-float);
+  font: 600 var(--fs-12) / 1.35 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  will-change: transform;
+}
 .maplibregl-ctrl-attrib {
   font-family: var(--font-sans);
   font-size: var(--fs-11);

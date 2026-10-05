@@ -1,5 +1,4 @@
-import { PathStyleExtension } from '@deck.gl/extensions'
-import { ColumnLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { IconLayer } from '@deck.gl/layers'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { Box, Compass, Crosshair, Map as MapIcon, Minus, Plus } from 'lucide-react'
 import * as maplibregl from 'maplibre-gl'
@@ -10,7 +9,7 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { inDeadZone } from '../domain/corridors'
-import type { Aspect, Shipment } from '../domain/types'
+import type { Aspect, Shipment, Timeline } from '../domain/types'
 import { useAppStore, useView } from '../state/context'
 import { useStore } from '../state/store'
 import { themedBasemap } from './map/basemap'
@@ -18,10 +17,6 @@ import { FleetList } from './map/FleetList'
 import { fleetAt, fleetBounds, pathBetween, tokenRgb, trailOf, type AnimatedVehicle, type LngLat } from './map/geometry'
 import { TripCard } from './map/TripCard'
 
-// Navigation arrow pointing north; tinted per aspect (mask icon).
-const ARROW = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><path d="M32 6 L52 54 Q32 44 12 54 Z" fill="#fff" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>',
-)}`
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
@@ -33,7 +28,9 @@ function panelPadding(): maplibregl.PaddingOptions {
   return { top: 80, bottom: 140, left: 380, right: 440 }
 }
 
-const URGENCY: Record<Aspect, number> = { danger: 1, caution1: 0.72, caution2: 0.46, unknown: 0.26, clear: 0 }
+// 3D signal masts: taller the sooner the breach, so urgency reads as height.
+const MAST_PX: Record<Exclude<Aspect, 'clear'>, number> = { danger: 112, caution1: 92, caution2: 76, unknown: 56 }
+const LIT: Record<Aspect, number[]> = { danger: [0], caution2: [0, 1], caution1: [1], clear: [2], unknown: [] }
 
 interface Palette {
   ink: [number, number, number]
@@ -44,6 +41,9 @@ interface Palette {
   caution: [number, number, number]
   track: [number, number, number]
   hatch: [number, number, number]
+  clear: [number, number, number]
+  head: [number, number, number]
+  lampOff: [number, number, number]
 }
 
 function readPalette(): Palette {
@@ -56,10 +56,105 @@ function readPalette(): Palette {
     caution: tokenRgb('--caution'),
     track: tokenRgb('--track'),
     hatch: tokenRgb('--hatch'),
+    clear: tokenRgb('--clear'),
+    head: tokenRgb('--signal-head'),
+    lampOff: tokenRgb('--lamp-off'),
   }
 }
 
+const rgb = (c: [number, number, number]) => `rgb(${c.join(',')})`
+const lines = (paths: LngLat[][], props: (i: number) => Record<string, unknown> = () => ({})): GeoJSON.FeatureCollection => ({
+  type: 'FeatureCollection',
+  features: paths.map((coordinates, i) => ({ type: 'Feature', properties: props(i), geometry: { type: 'LineString', coordinates } })),
+})
+const EMPTY = lines([])
+
+// Lines and stops are drawn by MapLibre, not deck.gl. deck's PathLayer shader took ~3.2 s
+// per variant to compile on ANGLE/D3D11 (two variants: plain and dashed), a
+// first-visit freeze; MapLibre's line programs compile in tens of milliseconds.
+// deck.gl keeps only what moves every frame.
+// Whether the style itself has loaded. map.isStyleLoaded() also waits for every
+// tile, so a guard on it skips the work whenever tiles are in flight.
+const styleReady = (map: maplibregl.Map) => Boolean((map as unknown as { style?: { _loaded?: boolean } }).style?._loaded)
+
+function ensureRouteLayers(map: maplibregl.Map, p: Palette, { corridors, deadZones, ...stops }: ReturnType<typeof routeGeometry>) {
+  if (!styleReady(map) || map.getSource('wt-corridors')) return
+  map.addSource('wt-corridors', { type: 'geojson', data: corridors })
+  map.addSource('wt-dead-zones', { type: 'geojson', data: deadZones })
+  map.addSource('wt-trail', { type: 'geojson', data: EMPTY })
+  map.addSource('wt-ahead', { type: 'geojson', data: EMPTY })
+  // Under the basemap's place names, so town labels stay readable.
+  const below = map.getStyle().layers.find((l) => l.type === 'symbol')?.id
+  const add = (layer: maplibregl.AddLayerObject) => map.addLayer(layer, below)
+  const round = { 'line-cap': 'round', 'line-join': 'round' } as const
+  add({ id: 'wt-corridors', type: 'line', source: 'wt-corridors', layout: round, paint: { 'line-color': rgb(p.track), 'line-width': 4 } })
+  add({ id: 'wt-dead-zones', type: 'line', source: 'wt-dead-zones', paint: { 'line-color': rgb(p.hatch), 'line-opacity': 0.9, 'line-width': 8, 'line-dasharray': [1.2, 1.2] } })
+  add({ id: 'wt-trail', type: 'line', source: 'wt-trail', layout: round, paint: { 'line-color': rgb(p.ink3), 'line-opacity': 0.55, 'line-width': 3 } })
+  add({ id: 'wt-ahead', type: 'line', source: 'wt-ahead', layout: round, paint: { 'line-color': rgb(p.cobalt), 'line-width': 6 } })
+  map.addSource('wt-customers', { type: 'geojson', data: stops.customers })
+  map.addSource('wt-depots', { type: 'geojson', data: stops.depots })
+  add({ id: 'wt-customers', type: 'circle', source: 'wt-customers', paint: { 'circle-radius': 5, 'circle-color': rgb(p.surface), 'circle-stroke-color': rgb(p.ink3), 'circle-stroke-width': 2 } })
+  add({ id: 'wt-depots', type: 'circle', source: 'wt-depots', paint: { 'circle-radius': 6, 'circle-color': rgb(p.surface), 'circle-stroke-color': rgb(p.ink), 'circle-stroke-width': 2 } })
+}
+
+const svg = (size: number, body: string) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${body}</svg>`)}`
+
+// One icon per vehicle: the disc and its north-pointing arrow, coloured per
+// aspect. A disc is round, so rotating the whole icon by bearing is harmless,
+// and the map needs a single deck.gl shader for its vehicles.
+function vehicleIcon(p: Palette, aspect: Aspect, estimated: boolean, theme: string) {
+  const ring = estimated ? `stroke="${rgb(p.ink3)}" stroke-dasharray="7 5"` : `stroke="${rgb(p.surface)}"`
+  const arrow = `<path transform="translate(12 12) scale(0.625)" d="M32 6 L52 54 Q32 44 12 54 Z" fill="${rgb(aspectColor(p, aspect))}" stroke="${rgb(aspectColor(p, aspect))}" stroke-width="4" stroke-linejoin="round" opacity="${estimated ? 0.5 : 1}"/>`
+  return { id: `${theme}-${aspect}-${estimated ? 'est' : 'fix'}`, url: svg(64, `<circle cx="32" cy="32" r="28" fill="${rgb(p.surface)}" stroke-width="3" ${ring}/>${arrow}`), width: 64, height: 64 }
+}
+
+// A billboarded signal mast: the console's signal head (lamp position carries
+// the aspect, as in SignalHead) on a stem standing on the vehicle. Drawn by the
+// icon shader the vehicles already use; a 3D column layer cost ~1 s of shader
+// compilation the first time 3D was switched on.
+function mastIcon(p: Palette, aspect: Exclude<Aspect, 'clear'>, theme: string) {
+  const h = MAST_PX[aspect] * 2
+  const lamp = (i: number) => {
+    const cy = 12 + i * 18
+    if (aspect === 'unknown') return `<circle cx="14" cy="${cy}" r="5.2" fill="none" stroke="${rgb(p.ink3)}" stroke-width="2.4"/>`
+    const lit = LIT[aspect].includes(i)
+    return `<circle cx="14" cy="${cy}" r="6.4" fill="${rgb(lit ? (aspect === 'danger' ? p.danger : p.caution) : p.lampOff)}"/>`
+  }
+  const body = `<rect x="12.5" y="58" width="3" height="${h - 58}" fill="${rgb(p.ink3)}"/><rect x="2" y="1.5" width="24" height="57" rx="12" fill="${rgb(p.head)}" stroke="${rgb(p.surface)}" stroke-width="3"/>${[0, 1, 2].map(lamp).join('')}`
+  return { id: `${theme}-mast-${aspect}`, url: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="${h}" viewBox="0 0 28 ${h}">${body}</svg>`)}`, width: 28, height: h, anchorX: 14, anchorY: h }
+}
+
+const haloIcon = (p: Palette, theme: string) => ({
+  id: `${theme}-halo`,
+  url: svg(104, `<circle cx="52" cy="52" r="48" fill="${rgb(p.cobalt)}" fill-opacity="0.16" stroke="${rgb(p.cobalt)}" stroke-width="5"/>`),
+  width: 104,
+  height: 104,
+})
+
 const aspectColor = (p: Palette, a: Aspect) => (a === 'danger' ? p.danger : a === 'caution1' || a === 'caution2' ? p.caution : a === 'unknown' ? p.ink3 : p.ink)
+
+const points = (rows: { position: LngLat; [k: string]: unknown }[]): GeoJSON.FeatureCollection => ({
+  type: 'FeatureCollection',
+  features: rows.map(({ position, ...properties }) => ({ type: 'Feature', properties, geometry: { type: 'Point', coordinates: position } })),
+})
+
+function routeGeometry(timeline: Timeline) {
+  const zones = timeline.corridors.flatMap((c) => c.deadZones.map((z) => ({ name: z.name, path: pathBetween(c, z.fromKm, z.toKm) })))
+  return {
+    depots: points(timeline.corridors.flatMap((c) => c.stations.filter((s) => s.depot).map((s) => ({ name: s.name, position: [s.lon, s.lat] as LngLat })))),
+    // Customer drops on city rounds: what a multi-drop route is made of.
+    customers: points(
+      timeline.corridors
+        .filter((c) => c.kind === 'urban')
+        .flatMap((c) => c.stations.filter((s) => !s.depot).map((s) => ({ name: s.name, type: s.type ?? 'stop', window: s.window ?? '', position: [s.lon, s.lat] as LngLat }))),
+    ),
+    corridors: lines(timeline.corridors.map((c) => pathBetween(c, 0, c.lengthKm))),
+    deadZones: lines(
+      zones.map((z) => z.path),
+      (i) => ({ name: zones[i].name }),
+    ),
+  }
+}
 
 export function MapView() {
   const store = useAppStore()
@@ -70,6 +165,7 @@ export function MapView() {
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const overlayRef = useRef<MapboxOverlay | null>(null)
+  const labelsRef = useRef<HTMLDivElement | null>(null)
   const [mode3d, setMode3d] = useState(false)
   const [bearing, setBearing] = useState(0)
   // The animation loop reads these; sync them after render, never during it.
@@ -101,6 +197,39 @@ export function MapView() {
       const overlay = new MapboxOverlay({ interleaved: false, layers: [], getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab') })
       map.addControl(overlay)
       const m = map
+      const geometry = routeGeometry(store.timeline)
+      const addRoutes = () => ensureRouteLayers(m, readPalette(), geometry)
+      // 'style.load' also fires after a theme swap, which drops custom layers. A
+      // style object can finish loading inside the constructor, so try now too.
+      m.on('style.load', addRoutes)
+      m.on('load', addRoutes)
+      addRoutes()
+      // Zones and stops are MapLibre features, so their hover notes are ours to draw.
+      const tip = document.createElement('div')
+      tip.className = 'map-tooltip map-tooltip--zone'
+      tip.hidden = true
+      container.current.append(tip)
+      m.on('mousemove', (e) => {
+        const box: [maplibregl.PointLike, maplibregl.PointLike] = [
+          [e.point.x - 4, e.point.y - 4],
+          [e.point.x + 4, e.point.y + 4],
+        ]
+        const layers = ['wt-depots', 'wt-customers', 'wt-dead-zones'].filter((id) => m.getLayer(id))
+        const f = layers.length ? m.queryRenderedFeatures(box, { layers })[0] : undefined
+        tip.hidden = !f
+        if (f) {
+          const { name, type, window } = f.properties as { name: string; type?: string; window?: string }
+          tip.textContent =
+            f.layer.id === 'wt-dead-zones' ? `${name}: no signal` : f.layer.id === 'wt-depots' ? `${name} depot: cold storage` : `${name}\n${(type ?? 'stop').replace('_', ' ')}${window ? ` · delivery window ${window}` : ''}`
+          tip.style.transform = `translate(${e.point.x + 12}px, ${e.point.y + 12}px)`
+        }
+      })
+      m.on('mouseout', () => (tip.hidden = true))
+      const labels = document.createElement('div')
+      labels.className = 'map-labels'
+      labels.setAttribute('aria-hidden', 'true')
+      container.current.append(labels)
+      labelsRef.current = labels
       m.on('rotate', () => setBearing(m.getBearing()))
       m.on('dragstart', () => stateRef.current.follow && store.setFollow(false))
       // Basemap failures arrive as map 'error' events, never on the console.
@@ -148,7 +277,7 @@ export function MapView() {
     // Must run only on 'style.load': adding a layer from 'styledata' (which
     // fires mid-load) throws inside MapLibre's loader and aborts the basemap.
     const ensureBuildings = () => {
-      if (!map.isStyleLoaded() || !map.getSource('openmaptiles') || map.getLayer('wt-buildings')) return
+      if (!styleReady(map) || !map.getSource('openmaptiles') || map.getLayer('wt-buildings')) return
       const p = readPalette()
       map.addLayer({
         id: 'wt-buildings',
@@ -187,46 +316,20 @@ export function MapView() {
     let frameNo = 0
     let lastFollow = 0
     let slowKey = ''
-    let slow: { trail: LngLat[]; ahead: LngLat[]; labelIds: Set<string> } = { trail: [], ahead: [], labelIds: new Set() }
+    // Arrays handed to deck.gl stay the same object between steps: a new array
+    // makes deck rebuild the layer (for text, a full re-layout) on every frame.
+    let slow: { labelled: AnimatedVehicle[]; halo: AnimatedVehicle[]; posts: AnimatedVehicle[] } = { labelled: [], halo: [], posts: [] }
 
     const vehicles: AnimatedVehicle[] = fleetAt(timeline, store.precise())
     const byId = new Map(vehicles.map((v) => [v.vehicle.vehicleId, v]))
-    const corridorPaths = timeline.corridors.map((c) => ({ id: c.id, path: pathBetween(c, 0, c.lengthKm) }))
-    const deadZones = timeline.corridors.flatMap((c) => c.deadZones.map((z) => ({ name: z.name, path: pathBetween(c, z.fromKm, z.toKm) })))
-    const depots = timeline.corridors.flatMap((c) => c.stations.filter((s) => s.depot).map((s) => ({ name: s.name, position: [s.lon, s.lat] as LngLat })))
-    // Customer drops on city rounds: what a multi-drop route is made of.
-    const customers = timeline.corridors
-      .filter((c) => c.kind === 'urban')
-      .flatMap((c) => c.stations.filter((s) => !s.depot).map((s) => ({ name: s.name, type: s.type ?? 'stop', window: s.window, position: [s.lon, s.lat] as LngLat })))
+    // Labels are HTML pills placed with map.project: crisp type in the app's own
+    // font, and no deck.gl text shader to compile.
+    const labelEls = new Map<string, HTMLSpanElement>()
     const aspectOf = (v: AnimatedVehicle) => shipmentsRef.current.get(v.vehicle.vehicleId)?.risk.aspect ?? 'clear'
-
-    const staticLayers = (p: Palette) => [
-      new PathLayer({ id: 'corridors', data: corridorPaths, getPath: (d) => d.path, getColor: [...p.track, 255], widthUnits: 'pixels', getWidth: 4, capRounded: true, jointRounded: true }),
-      new PathLayer({
-        id: 'dead-zones',
-        data: deadZones,
-        getPath: (d) => d.path,
-        getColor: [...p.hatch, 230],
-        widthUnits: 'pixels',
-        getWidth: 8,
-        getDashArray: [1.2, 1.2],
-        dashJustified: true,
-        extensions: [new PathStyleExtension({ dash: true })],
-        pickable: true,
-      }),
-      new ScatterplotLayer({ id: 'customers', data: customers, getPosition: (d) => d.position, getRadius: 5, radiusUnits: 'pixels', getFillColor: [...p.surface, 255], getLineColor: [...p.ink3, 255], lineWidthUnits: 'pixels', getLineWidth: 2, stroked: true, pickable: true }),
-      new ScatterplotLayer({ id: 'depots', data: depots, getPosition: (d) => d.position, getRadius: 6, radiusUnits: 'pixels', getFillColor: [...p.surface, 255], getLineColor: [...p.ink, 255], lineWidthUnits: 'pixels', getLineWidth: 2, stroked: true, pickable: true }),
-    ]
-    let statics = staticLayers(palette)
 
     const tooltip = ({ object, layer }: { object?: unknown; layer?: { id: string } | null }) => {
       if (!object || !layer) return null
-      const o = object as { name?: string; type?: string; window?: string; vehicle?: AnimatedVehicle['vehicle'] }
-      if (layer.id === 'customers') return { text: `${o.name}
-${(o.type ?? 'stop').replace('_', ' ')}${o.window ? ` · delivery window ${o.window}` : ''}`, className: 'map-tooltip' }
-      if (layer.id === 'dead-zones') return { text: `${o.name}: no signal`, className: 'map-tooltip' }
-      if (layer.id === 'depots') return { text: `${o.name} depot: cold storage`, className: 'map-tooltip' }
-      const v = o.vehicle
+      const v = (object as Partial<AnimatedVehicle>).vehicle
       if (!v) return null
       const s = shipmentsRef.current.get(v.vehicleId)
       const corridor = timeline.corridors.find((c) => c.id === v.corridorId)
@@ -246,7 +349,6 @@ ${(o.type ?? 'stop').replace('_', ' ')}${o.window ? ` · delivery window ${o.win
       if (store.getState().theme !== paletteTheme) {
         paletteTheme = store.getState().theme
         palette = readPalette()
-        statics = staticLayers(palette)
       }
       const p = palette
       const t = store.precise()
@@ -269,83 +371,82 @@ ${(o.type ?? 'stop').replace('_', ' ')}${o.window ? ` · delivery window ${o.win
         slowKey = key
         const sv = sel ? byId.get(sel) : undefined
         const corridor = sv && timeline.corridors.find((c) => c.id === sv.vehicle.corridorId)
+        const source = (id: string) => map.getSource(id) as maplibregl.GeoJSONSource | undefined
+        source('wt-trail')?.setData(lines(sv ? [trailOf(timeline, sv.vehicle.vehicleId, t)] : []))
+        source('wt-ahead')?.setData(lines(sv && corridor ? [pathBetween(corridor, sv.vehicle.km, corridor.lengthKm)] : []))
         slow = {
-          trail: sv ? trailOf(timeline, sv.vehicle.vehicleId, t) : [],
-          ahead: sv && corridor ? pathBetween(corridor, sv.vehicle.km, corridor.lengthKm) : [],
-          labelIds: new Set(vehicles.filter((v) => v.vehicle.vehicleId === sel || (zoom >= 6.2 && aspectOf(v) !== 'clear')).map((v) => v.vehicle.vehicleId)),
+          labelled: vehicles.filter((v) => v.vehicle.vehicleId === sel || (zoom >= 6.2 && aspectOf(v) !== 'clear')),
+          halo: sv ? [sv] : [],
+          posts: vehicles.filter((v) => aspectOf(v) !== 'clear'),
+        }
+        const keep = new Set(slow.labelled.map((v) => v.vehicle.vehicleId))
+        for (const [id, el] of labelEls) {
+          if (keep.has(id)) continue
+          el.remove()
+          labelEls.delete(id)
+        }
+        for (const id of keep) {
+          if (labelEls.has(id)) continue
+          const el = document.createElement('span')
+          el.className = 'map-label'
+          el.textContent = id
+          labelsRef.current?.append(el)
+          labelEls.set(id, el)
         }
       }
+      for (const v of slow.labelled) {
+        const pt = map.project(v.position)
+        const el = labelEls.get(v.vehicle.vehicleId)
+        // In 3D a mast stands on the vehicle; the label sits above its head.
+        const a = aspectOf(v)
+        const lift = is3d && a !== 'clear' ? MAST_PX[a] + 6 : 22
+        if (el) el.style.transform = `translate(${pt.x.toFixed(1)}px, ${(pt.y - lift).toFixed(1)}px) translate(-50%, -100%)`
+      }
       const selectedV = sel ? byId.get(sel) : undefined
-      const labelled = vehicles.filter((v) => slow.labelIds.has(v.vehicle.vehicleId))
 
       overlay.setProps({
         getTooltip: tooltip,
         layers: [
-          ...statics,
           ...(selectedV
             ? [
-                new PathLayer({ id: 'trail', data: [slow.trail], getPath: (d: LngLat[]) => d, getColor: [...p.ink3, 140], widthUnits: 'pixels', getWidth: 3, capRounded: true, jointRounded: true }),
-                new PathLayer({ id: 'route-ahead', data: [slow.ahead], getPath: (d: LngLat[]) => d, getColor: [...p.cobalt, 255], widthUnits: 'pixels', getWidth: 6, capRounded: true, jointRounded: true }),
-                new ScatterplotLayer({ id: 'selected-halo', data: [selectedV], getPosition: (v: AnimatedVehicle) => v.position, getRadius: 24, radiusUnits: 'pixels', getFillColor: [...p.cobalt, 40], getLineColor: [...p.cobalt, 255], lineWidthUnits: 'pixels', getLineWidth: 2.5, stroked: true, updateTriggers: { getPosition: frameNo } }),
+                new IconLayer({
+                  id: 'selected-halo',
+                  data: slow.halo,
+                  getPosition: (v: AnimatedVehicle) => v.position,
+                  getIcon: () => haloIcon(p, paletteTheme),
+                  getSize: 52,
+                  sizeUnits: 'pixels',
+                  billboard: false,
+                  updateTriggers: { getPosition: frameNo, getIcon: paletteTheme },
+                }),
               ]
             : []),
           ...(is3d
             ? [
-                new ColumnLayer({
+                new IconLayer({
                   id: 'signal-posts',
-                  data: vehicles,
+                  data: slow.posts,
                   getPosition: (v: AnimatedVehicle) => v.position,
-                  radius: 3200,
-                  diskResolution: 12,
-                  extruded: true,
-                  getElevation: (v: AnimatedVehicle) => URGENCY[aspectOf(v)] * 60_000,
-                  getFillColor: (v: AnimatedVehicle) => [...aspectColor(p, aspectOf(v)), URGENCY[aspectOf(v)] > 0 ? 210 : 0],
-                  updateTriggers: { getPosition: frameNo, getElevation: slowKey, getFillColor: slowKey },
+                  getIcon: (v: AnimatedVehicle) => mastIcon(p, aspectOf(v) as Exclude<Aspect, 'clear'>, paletteTheme),
+                  getSize: (v: AnimatedVehicle) => MAST_PX[aspectOf(v) as Exclude<Aspect, 'clear'>],
+                  sizeUnits: 'pixels',
+                  billboard: true,
+                  updateTriggers: { getPosition: frameNo, getIcon: slowKey, getSize: slowKey },
                 }),
               ]
             : []),
-          new ScatterplotLayer({
-            id: 'vehicle-discs',
-            data: vehicles,
-            getPosition: (v: AnimatedVehicle) => v.position,
-            getRadius: 14,
-            radiusUnits: 'pixels',
-            getFillColor: [...p.surface, 255],
-            getLineColor: (v: AnimatedVehicle) => (v.vehicle.estimated ? [...p.ink3, 255] : [...p.surface, 255]),
-            lineWidthUnits: 'pixels',
-            getLineWidth: 1.5,
-            stroked: true,
-            pickable: true,
-            updateTriggers: { getPosition: frameNo, getLineColor: slowKey },
-          }),
           new IconLayer({
             id: 'vehicles',
             data: vehicles,
             getPosition: (v: AnimatedVehicle) => v.position,
-            getIcon: () => ({ id: 'arrow', url: ARROW, width: 64, height: 64, mask: true }),
-            getSize: 20,
+            getIcon: (v: AnimatedVehicle) => vehicleIcon(p, aspectOf(v), v.vehicle.estimated, paletteTheme),
+            getSize: 32,
             sizeUnits: 'pixels',
             getAngle: (v: AnimatedVehicle) => -v.bearing,
-            getColor: (v: AnimatedVehicle) => [...aspectColor(p, aspectOf(v)), v.vehicle.estimated ? 130 : 255],
             billboard: false,
             pickable: true,
             onClick: ({ object }: { object?: AnimatedVehicle }) => object && store.select(object.vehicle.vehicleId, false),
-            updateTriggers: { getPosition: frameNo, getAngle: frameNo, getColor: slowKey },
-          }),
-          new TextLayer({
-            id: 'labels',
-            data: labelled,
-            getPosition: (v: AnimatedVehicle) => v.position,
-            getText: (v: AnimatedVehicle) => v.vehicle.vehicleId,
-            getPixelOffset: [0, -26],
-            getSize: 12,
-            fontFamily: 'Geist Variable, system-ui, sans-serif',
-            fontWeight: 600,
-            getColor: [...p.ink, 255],
-            background: true,
-            getBackgroundColor: [...p.surface, 235],
-            backgroundPadding: [6, 3],
-            updateTriggers: { getPosition: frameNo },
+            updateTriggers: { getPosition: frameNo, getAngle: frameNo, getIcon: slowKey },
           }),
         ],
       })

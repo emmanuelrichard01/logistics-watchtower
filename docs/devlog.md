@@ -2,6 +2,20 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## The map's first visit froze for 25 seconds (Mon 5 Oct 2026)
+
+- After the console switched to simulator recordings, the map probe dropped from 59.9 to 38-48 fps. A probe sampling 3-second windows showed the steady state was still about 60 fps. The real problem was **the first 23-27 s after opening the map**, which the old probe's 4 s warm-up partly overlapped.
+- A CPU profile from navigation put 12 s in luma.gl's `_getLinkStatus`. Per-program link times:
+  - deck.gl PathLayer: 3.5 s and 3.0 s (plain and dashed variants).
+  - Text: 1.5 s over two programs.
+  - Scatterplot and icons: 0.7 s each.
+  - MapLibre's own programs: 0.02-0.2 s each.
+- Turning on `KHR_parallel_shader_compile` (disabled by default in luma.gl) moved the stall rather than removing it, because luma.gl reflects attributes right after linking.
+- **Fix.** deck.gl keeps one IconLayer program for what moves: vehicle discs and arrows are composited into one icon, and the halo and 3D masts reuse it. Lines, stops and dead zones are MapLibre layers, and labels are HTML.
+- **Result.** A cold first visit now settles in 5.8-6.7 s and then holds 58.9-59.4 fps. The first 3D toggle went from 1.1-1.3 s of long tasks to zero.
+- **Lesson:** a warm-up period in a benchmark hides first-visit cost. The probe now uses a cold profile and reports settle time separately from frame rate.
+- **Also fixed on the way:** `map.isStyleLoaded()` waits for tiles too. A guard on it silently skipped adding layers while tiles were in flight, a latent bug in the 3D-buildings toggle as well.
+
 ## The processor's core, as pure functions (Mon 5 Oct 2026)
 
 - The domain package now covers stages A-E of plan section 9 without any I/O: dedup and minute buckets, sensor trust, time-to-breach (exponential-approach baseline with a p10-p90 range), MKT and exposure, risk assessment, the alert state machine (ADR-0006) and the vehicle evaluator that composes them over one ordered input log.

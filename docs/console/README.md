@@ -119,16 +119,34 @@ One time handle drives every view at once. A "Drag to replay" hint sits on its t
 
 ## Performance
 
-Measured on the reference laptop: Intel i7-10510U with integrated UHD 620 graphics, Windows 11, Chromium via Playwright with `--use-angle=d3d11`. The probe is `apps/dashboard/scripts/perf-map.mjs`, which counts animation frames per second and long-task time over 6 s on the map page after a 4 s warm-up.
+Measured on the reference laptop: Intel i7-10510U with integrated UHD 620 graphics, Windows 11, Chromium via Playwright with `--use-angle=d3d11`, production build. The probe is `apps/dashboard/scripts/perf-map.mjs`. It opens the map in a **cold** browser profile, with no shader or HTTP cache, which is what a first-time visitor gets. It reports two numbers: how long until frames hold 50 fps for a full second, then frames per second and long-task time over the next 6 s.
 
-| Build | Map frame rate (three runs) | Long tasks |
+| Map page | Settles in (cold) | Frame rate then | Long tasks |
+| --- | --- | --- | --- |
+| Before (deck.gl draws everything) | 23.2, 26.6 s | 59.2, 59.4 fps | 0 ms |
+| Now, idle | 6.7, 5.8, 5.9 s | 59.4, 59.1, 58.9 fps | 0 ms |
+| Now, vehicle selected | 5.9, 5.9, 6.6 s | 58.2, 57.9, 58.3 fps | 0 ms |
+
+Earlier probes measured 59.8-59.9 fps after a 4 s warm-up. Recording-backed data, more layers and the first-visit guide later pulled that window down to 38-48 fps. The cause turned out to be **startup, not animation**: the steady state was always about 60 fps.
+
+**Shader compilation was the freeze.** Profiling the first seconds showed 12 s of main-thread time in luma.gl's `_getLinkStatus`: on ANGLE/Direct3D 11 each deck.gl shader takes a long time to compile, and luma.gl waits for it synchronously. Timed per program (`scripts/perf-shaders.mjs`):
+
+| Program | Link time, cold | Now |
 | --- | --- | --- |
-| Production (`make console`) | 59.9, 59.9, 59.8 fps | 0 ms |
-| Dev server (`make console-dev`) | 0.2, 20.5, 47.5 fps | up to 1.1 s |
+| deck.gl PathLayer, plain and dashed | 3.5 s + 3.0 s | MapLibre `line` layers |
+| deck.gl ScatterplotLayer (discs, stops) | 0.7 s | Part of the vehicle icon; MapLibre `circle` layers for stops |
+| deck.gl TextLayer (two programs) | 0.8 s + 0.7 s | HTML labels placed with `map.project` |
+| deck.gl ColumnLayer (3D posts, on first 3D toggle) | 1.0 s | Billboarded signal-mast icons |
+| deck.gl IconLayer (vehicles) | 0.7-0.9 s | Kept: the only deck.gl program left |
+| MapLibre programs, each | 0.02-0.2 s | Unchanged |
+
+Enabling parallel shader compilation (`KHR_parallel_shader_compile`, off by default in luma.gl) did not help. luma.gl reflects the program's attributes right after linking, and that blocks just the same. With a warm shader cache (a second visit), the old map already settled in about 4 s. So the fix matters most for first-time visitors, who are exactly the people a portfolio link reaches. The first switch to 3D went from 1.1-1.3 s of long tasks to none.
 
 What made the difference:
 
-- **Production build vs dev server.** React development mode, StrictMode double rendering and on-demand compilation cost the dev server most of its frames. Demos should run the production build.
+- **One deck.gl shader.** deck.gl now draws only what moves every frame, with a single IconLayer program. Each vehicle's disc and arrow are one icon: a disc is round, so rotating it with the bearing is harmless. The selection halo and the 3D masts reuse the same program. Lines, stops and dead zones are MapLibre layers under the basemap's place names.
+
+- **Production build vs dev server.** The earlier probe measured the dev server at 0.2-47.5 fps against 59.8-59.9 for the production build. React development mode, StrictMode double rendering and on-demand compilation cost the dev server most of its frames. Demos should run the production build.
 - **Per-frame work cut to positions only.** The vehicle array is stable and mutated in place. Static layers are built once. Trails, routes and labels recompute only when the timeline step, selection or zoom bucket changes.
 - **Separate canvases.** deck.gl renders in its own canvas over MapLibre. Interleaving them made every vehicle update repaint the whole vector basemap.
 - **The MapLibre worker** is bundled explicitly (`?worker&url`). MapLibre finds its worker with a computed URL that Vite can't see, so production builds shipped without it and the basemap never decoded tiles.
