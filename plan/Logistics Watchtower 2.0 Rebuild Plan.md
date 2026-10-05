@@ -4,7 +4,7 @@ Oct 5, 2026 · @Emma
 
 ## 1. Mission, success criteria and non-goals
 
-Rebuild Watchtower from a telemetry-and-alerts demo into a cold-chain risk decision platform that stays correct under failure, can replay any incident, and publishes measured numbers. One person can finish the core in 12 weeks if the scope rules in section 2 are held.
+Rebuild Watchtower from a telemetry-and-alerts demo into a cold-chain risk decision platform that stays correct under failure, can replay any incident, and publishes measured numbers. One person can finish the core in 14 weeks if the scope rules in section 2 are held. (Extended from 12 weeks on 5 Oct 2026 to fund the operator console; see ADR-0010.)
 
 **Mission.** Tell an operator which shipment is at risk, how long remains before the cargo is compromised, how confident the system is, what evidence supports that, and what to do next. Do it on a Nigerian reality: 30 to 40 °C ambient, long dead zones between Lagos, Ibadan, Ilorin and Abuja, and sensors that lie.
 
@@ -20,6 +20,7 @@ Rebuild Watchtower from a telemetry-and-alerts demo into a cold-chain risk decis
 | 6 | Analytics | Gold dbt models pass all tests; a backfill after a corrected transform shows the changed metrics |
 | 7 | Measured performance | Benchmark report with hardware, config, p50/p95/p99 latency and sustained events per second |
 | 8 | Operational maturity | ADRs, runbooks, SLO dashboard and a candid limitations section |
+| 9 | Operator console | An operator completes the full incident workflow on desktop and phone in Playwright; map frame rate and interaction latency are measured against stated budgets; axe and keyboard-only runs pass |
 
 **Non-goals.** These are deliberate, so they do not creep back in.
 
@@ -31,7 +32,7 @@ Rebuild Watchtower from a telemetry-and-alerts demo into a cold-chain risk decis
 
 ## 2. Scope rules: core, should-have and stretch
 
-The build has three tiers, and the 12-week plan only commits to Tier 0 and Tier 1. Both reviews of the old project agreed on the ideas; the risk now is scope, not direction.
+The build has three tiers, and the 14-week plan only commits to Tier 0 and Tier 1. Both reviews of the old project agreed on the ideas; the risk now is scope, not direction.
 
 **Admission test for any component.** It enters the build only if all three are true:
 
@@ -41,7 +42,7 @@ The build has three tiers, and the 12-week plan only commits to Tier 0 and Tier 
 
 | Tier | Commitment | Contents |
 | --- | --- | --- |
-| 0: Core | Must ship | Event contracts, idempotent processing, DLQ and replay; Postgres domain model and durable alerts; event-time processing with late-data handling; sensor-trust layer; time-to-breach and MKT; edge buffering simulation; Parquet archive; failure-injection tests; benchmark report |
+| 0: Core | Must ship | Event contracts, idempotent processing, DLQ and replay; Postgres domain model and durable alerts; event-time processing with late-data handling; sensor-trust layer; time-to-breach and MKT; edge buffering simulation; Parquet archive; failure-injection tests; benchmark report; operator console with mobile parity (section 13) |
 | 1: Should-have | Ship if on schedule | dbt Silver/Gold with backfill demo; OpenTelemetry tracing; SLO dashboard; JWT auth with roles; operator workflow (acknowledge, assign, resolve); loss-weighted prioritisation |
 | 2: Stretch | Documented, not built | Flink migration path, Iceberg, multi-tenancy, Kubernetes and Helm, LLM incident summaries, ML anomaly models, per-device mTLS |
 
@@ -515,7 +516,7 @@ The API is a thin, typed layer over Postgres and the event streams. It enforces 
 
 ## 13. Operator dashboard and incident workflows
 
-The dashboard exists to help an operator decide, so it ranks by expected loss, shows confidence and evidence next to every number, and says plainly when data is old or estimated. Time-box the whole UI to about one week of effort; the backend is the project.
+The dashboard exists to help an operator decide, so it ranks by expected loss, shows confidence and evidence next to every number, and says plainly when data is old or estimated. It is a core deliverable with mobile parity: a first slice in week 9, then a dedicated Experience phase in weeks 10 and 11 (ADR-0010). The visual direction and interaction design live in `docs/design/console.md`. A separate public case-study page carries the scroll-driven storytelling; the console itself uses restrained, state-bearing motion.
 
 | View | Primary user | Key elements |
 | --- | --- | --- |
@@ -730,9 +731,11 @@ logistics-watchtower/
 3. Rewrite everything else behind the new contracts rather than porting file by file.
 4. Replace the monolithic `producer.py`, `processor.py` and `api.py` with the separated apps above, so no file becomes a 500-line catch-all again.
 
-## 18. 12-week roadmap
+## 18. 14-week roadmap
 
 &#91;embedded content: roadmap · 6 phases, 6 gates, 12 weeks\]
+
+> The embedded roadmap predates the 14-week extension (ADR-0010). The phase list below is current: Experience is a new phase in weeks 10 and 11, and Evidence moves to weeks 12 to 14.
 
 A phase that misses its gate does not hand unfinished work to the next one. The detail below lists each phase's work and the evidence that closes its gate.
 
@@ -766,15 +769,21 @@ The day-by-day plan is in section 19.
 ### Phase 4: Decisions (weeks 8 and 9)
 
 - Week 8: wire time-to-breach and exposure into the processor; `risk.assessments.v1` and its table; expected-loss ranking and playbook actions; forecast, exposure-budget and compressor-degradation alerts; dead-reckoning projection through gaps; reconciliation job for very late data; evaluation harness with precision, recall and lead time, comparing v1 rules with v2.
-- Week 9 (time-boxed): dashboard fleet board, shipment detail with forecast range, incident queue, map and data-health view; operator workflow with escalation timers and a notifier with stub channels; Playwright end-to-end test; OpenTelemetry tracing and the SLO dashboard, moving to week 11 if behind.
+- Week 9 (time-boxed): dashboard fleet board, shipment detail with forecast range, incident queue, map and data-health view; operator workflow with escalation timers and a notifier with stub channels; Playwright end-to-end test; OpenTelemetry tracing and the SLO dashboard, moving to week 13 if behind.
 - **Gate 5:** the compressor-degradation scenario raises a forecast alert before the breach with a measured lead time; the v1 versus v2 quality report is published; an operator completes an incident end to end in the Playwright test.
 
-### Phase 5: Evidence (weeks 10 to 12)
+### Phase 5: Experience (weeks 10 and 11)
 
-- Week 10: benchmark harness with an open-loop generator and the bulk simulator mode; timers instrumented; experiments 1 and 2; the v1 baseline compared; tuning notes.
-- Week 11: experiments 3 to 6 (reconnect storm, soak, recovery, scale-out); game days with runbooks and postmortems; security pass with the threat model and scans; deliberate buffer for overruns.
-- Week 12: experiments 7 and 8; docs site; ADR clean-up; README rewritten from measured numbers; demo video; case study with limitations; tag `v2.0`.
-- **Gate 6:** every success criterion in section 1 is linked to an artifact a reviewer can open.
+- Week 10: design system and tokens (light and dark themes, motion and type scales); app shell with command palette; fleet board and lane view; live map in 2D and 3D with smoothed live tracking; one shared time handle driving live and replay.
+- Week 11: shipment detail with the forecast range and the "why this score" panel; incident queue with keyboard triage; data-health view; phone and tablet layouts at full parity; accessibility pass; performance budgets measured.
+- **Gate 6:** an operator completes the incident workflow on desktop (1440 px) and phone (390 px) in Playwright; the map holds its frame-rate budget with 1,000 live vehicles on the reference laptop (measured, not claimed); axe and keyboard-only runs pass.
+
+### Phase 6: Evidence (weeks 12 to 14)
+
+- Week 12: benchmark harness with an open-loop generator and the bulk simulator mode; timers instrumented; experiments 1 and 2; the v1 baseline compared; tuning notes.
+- Week 13: experiments 3 to 6 (reconnect storm, soak, recovery, scale-out); game days with runbooks and postmortems; security pass with the threat model and scans; deliberate buffer for overruns.
+- Week 14: experiments 7 and 8; docs site; ADR clean-up; README rewritten from measured numbers; demo video; case study with limitations and the public case-study page; tag `v2.0`.
+- **Gate 7:** every success criterion in section 1 is linked to an artifact a reviewer can open.
 
 ## 19. Your first 7 days
 
@@ -809,8 +818,8 @@ The main risk is not technical: it is trying to build a team's roadmap alone. Th
 | Stream engine cannot express a requirement cleanly | Medium | High | Week-2 decision gate; engine-agnostic `domain` package so a switch costs the shell only | Spike needs workarounds for staleness or recovery |
 | Simulator realism becomes a rabbit hole | High | Medium | Time-box physics to 3 days; validate with three sanity properties; no real-world calibration chase | A fourth day on the thermal model |
 | Laptop cannot run the full stack or benchmarks | Medium | Medium | Compose profiles; heavy tests in CI; run the published benchmark once on a rented cloud VM and document it | Containers swapping or OOM-killed |
-| Frontend consumes the schedule | High | Medium | One-week time box; fall back to upgrading v1 `index.html`; API and data quality come first | UI work spills past week 9 |
-| Estimates are wrong | High | Medium | 30% overrun rule; slack in weeks 11 and 12; Friday demo and replan | Two consecutive phases late |
+| Frontend consumes the schedule | High | Medium | Dedicated Experience phase with its own gate (ADR-0010); UI built against recorded simulator streams so it never waits on the backend; API and data quality come first | UI work spills past week 9 |
+| Estimates are wrong | High | Medium | 30% overrun rule; slack in weeks 13 and 14; Friday demo and replan | Two consecutive phases late |
 | Claims without evidence | Medium | High | Honest-claims rule; every figure from a committed benchmark | A number in the README without a link to a run |
 | Cargo tolerances are inaccurate | Medium | Medium | Configurable profiles marked illustrative; cite published guidance per profile; ask a cold-chain practitioner to review | A profile with no source |
 | Momentum loss on a long solo build | Medium | High | A deliverable per day, a demo per Friday, public devlog | Two days with no commit |
@@ -869,6 +878,7 @@ The finished project should let a reviewer do four things in under 30 minutes: s
 - [ ] Runbooks and the SLO dashboard
 - [ ] ADRs for every decision below
 - [ ] A 3-minute demo video showing a failure injected and the incident resolved
+- [ ] Public case-study page
 - [ ] A candid limitations and next-steps section
 
 **Case study outline.** Problem and constraints; architecture; three deep dives; results; failures and what they taught; what comes next.
@@ -892,7 +902,7 @@ Two short articles come out of these naturally: one on event time and late data 
 | 0007 | Rules as versioned config | Week 5 | Code constants, database table, compacted topic |
 | 0008 | Auth model and WebSocket ticket | Week 5 | Session cookies, JWT, OIDC provider |
 | 0009 | Bronze partitioning by ingest time | Week 6 | Ingest date versus event date |
-| 0010 | Frontend scope and time box | Week 8 | Rebuild versus upgrade v1 page |
+| 0010 | Frontend scope and time box | Week 1 (decided early) | Rebuild versus upgrade v1 page; schedule extension versus cuts |
 | 0011 | Tracing and sampling strategy | Week 9 | Head, tail, or no tracing |
 | 0012 | Benchmark method and timers | Week 10 | Closed-loop versus open-loop load |
 | 0013 | Dependency licences | Week 1 | Redpanda, MinIO and alternatives |

@@ -7,7 +7,7 @@ date: 2026-10-05
 
 ## Context and Problem Statement
 
-v1 was a telemetry-and-alerts demo. Its README made claims the code could not back (see `docs/audit/v1-baseline.md`), and it had no tests. v2 is a solo 12-week rebuild (5 Oct to 27 Dec 2026). With one builder, the main risk is scope: a team's roadmap attempted alone.
+v1 was a telemetry-and-alerts demo. Its README made claims the code could not back (see `docs/audit/v1-baseline.md`), and it had no tests. v2 is a solo rebuild starting 5 Oct 2026, originally 12 weeks and extended to 14 (ending 10 Jan 2027) by ADR-0010. With one builder, the main risk is scope: a team's roadmap attempted alone.
 
 What is v2 for, what must it ship, and what must it explicitly not attempt?
 
@@ -52,7 +52,7 @@ Chosen option: **2, focused core with tiers**, because option 1 can't be finishe
 
 ### Confirmation
 
-Gate 6 (end of week 12): every success criterion in plan section 1 links to an artifact a reviewer can open.
+Gate 7 (end of week 14; numbered Gate 6 before ADR-0010): every success criterion in plan section 1 links to an artifact a reviewer can open.
 
 ## Open Question
 

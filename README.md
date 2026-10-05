@@ -2,7 +2,7 @@
 
 A cold-chain risk decision platform for refrigerated fleets: which shipment is at risk, how long until the cargo is compromised, how confident the system is, and what to do next.
 
-> **Status: under construction.** Week 1 of a 12-week rebuild. Nothing here is a finished feature, and this README contains no performance numbers. Under the [honest-claims rule](docs/adr/0001-mission-scope-and-non-goals.md), every number that appears later will link to a benchmark in this repo.
+> **Status: under construction.** Week 1 of a 14-week rebuild. Nothing here is a finished feature, and this README contains no performance numbers. Under the [honest-claims rule](docs/adr/0001-mission-scope-and-non-goals.md), every number that appears later will link to a benchmark in this repo.
 
 The previous version is preserved at tag [`v1-final`](../../tree/v1-final) and in [`legacy/v1/`](legacy/v1/). The [v1 audit](docs/audit/v1-baseline.md) explains why it is being rebuilt.
 

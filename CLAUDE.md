@@ -1,6 +1,6 @@
 # Logistics Watchtower 2.0
 
-Solo 12-week rebuild (5 Oct to 27 Dec 2026). `plan/Logistics Watchtower 2.0 Rebuild Plan.md` is the source of truth for scope, phases and gates. Work happens on the `v2` branch.
+Solo 14-week rebuild (5 Oct 2026 to 10 Jan 2027; extended by ADR-0010). `plan/Logistics Watchtower 2.0 Rebuild Plan.md` is the source of truth for scope, phases and gates. Work happens on the `v2` branch.
 
 ## Commands
 

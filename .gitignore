@@ -54,3 +54,7 @@ graphify-out/
 
 # Quix Streams local state (legacy v1)
 state/
+
+# Impeccable working files (decision pages, catalog references); decisions live in docs/design
+.impeccable/mocks/
+.impeccable/questions/
