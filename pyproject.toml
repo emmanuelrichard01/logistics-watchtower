@@ -21,6 +21,8 @@ package = false
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
+# Node apps and fixture data live under apps/ too but are not Python packages.
+exclude = ["apps/dashboard", "apps/dashboard-fixtures"]
 
 [tool.ruff]
 line-length = 100
