@@ -55,6 +55,7 @@ class Inputs:
     extra_heat_kw: float = 0.0  # into box air: solar load and other environment terms
     capacity_factor: float = 1.0  # evaporator icing etc. from the reefer layer
     cargo_heat_kw: float = 0.0  # generated inside the cargo: produce respiration
+    door_air_c: float | None = None  # air outside the open door, if not ambient (a chilled dock)
 
 
 def thermostat(air_c: float, on: bool, p: ThermalParams, i: Inputs) -> bool:
@@ -78,8 +79,22 @@ def supply_air_c(state: ThermalState, p: ThermalParams, i: Inputs) -> float:
     return state.air_c - p.supply_drop_k * cooling_kw(state, p, i) / p.q_max_kw
 
 
-def step(state: ThermalState, p: ThermalParams, load: Load, i: Inputs, dt_s: float) -> ThermalState:
-    air, cargo, on = state.air_c, state.cargo_c, state.compressor_on
+def step_multi(
+    air: float,
+    on: bool,
+    cargos: list[float],
+    loads: list[Load],
+    heats_kw: list[float],
+    p: ThermalParams,
+    i: Inputs,
+    dt_s: float,
+) -> tuple[float, bool, list[float]]:
+    """One air node and N cargo nodes (one per shipment) sharing it.
+
+    A van carrying vaccines, insulin and dairy has three thermal masses at different
+    temperatures, each exchanging heat with the same box air. ``heats_kw`` is heat generated
+    inside each cargo (respiration). With no cargo the box is just air."""
+    cargos = list(cargos)
     door_ua = p.door_ua_kw_per_k if i.door_open else 0.0
     fixed_kw = (p.defrost_kw if i.defrost else 0.0) + i.extra_heat_kw
     full_kw = p.q_max_kw * i.health * i.capacity_factor
@@ -88,11 +103,21 @@ def step(state: ThermalState, p: ThermalParams, load: Load, i: Inputs, dt_s: flo
         dt = min(MAX_SUBSTEP_S, remaining)
         remaining -= dt
         on = thermostat(air, on, p, i)
-        q_cargo = load.ua_kw_per_k * (cargo - air)
-        q_out = (p.wall_ua_kw_per_k + door_ua) * (i.ambient_c - air)
-        q_net = q_out + q_cargo + fixed_kw - (full_kw if on else 0.0)
-        air, cargo = (
-            air + dt * q_net / p.air_capacity_kj_per_k,
-            cargo + dt * (i.cargo_heat_kw - q_cargo) / load.capacity_kj_per_k,
-        )
+        flows = [ld.ua_kw_per_k * (c - air) for c, ld in zip(cargos, loads, strict=True)]
+        door_air = i.ambient_c if i.door_air_c is None else i.door_air_c
+        q_out = p.wall_ua_kw_per_k * (i.ambient_c - air) + door_ua * (door_air - air)
+        q_net = q_out + sum(flows) + fixed_kw - (full_kw if on else 0.0)
+        air += dt * q_net / p.air_capacity_kj_per_k
+        cargos = [
+            c + dt * (h - q) / ld.capacity_kj_per_k
+            for c, q, h, ld in zip(cargos, flows, heats_kw, loads, strict=True)
+        ]
+    return air, on, cargos
+
+
+def step(state: ThermalState, p: ThermalParams, load: Load, i: Inputs, dt_s: float) -> ThermalState:
+    """Single cargo node: the common inter-state trailer case."""
+    air, on, (cargo,) = step_multi(
+        state.air_c, state.compressor_on, [state.cargo_c], [load], [i.cargo_heat_kw], p, i, dt_s
+    )
     return replace(state, air_c=air, cargo_c=cargo, compressor_on=on)

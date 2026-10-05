@@ -53,7 +53,11 @@ def test_ground_truth_labels_hold(name: str) -> None:
 
     for expect in labels["expect"]:
         found = [
-            t for t in truth if t["vehicle_id"] == expect["vehicle"] and t["kind"] == expect["kind"]
+            t
+            for t in truth
+            if t["vehicle_id"] == expect["vehicle"]
+            and t["kind"] == expect["kind"]
+            and ("shipment" not in expect or t.get("shipment_id") == expect["shipment"])
         ]
         assert bool(found) == expect["present"], expect
         if not found:
@@ -77,6 +81,15 @@ def test_ground_truth_labels_hold(name: str) -> None:
         assert len({r["event_id"] for r in readings}) < len(readings)
     if labels.get("expect_buffered_readings"):
         assert any(r["link"]["buffered"] for r in readings)
+    stops = run(name).stops
+    for expect in labels.get("stops", []):
+        entry = next(s for s in stops if s["stop_id"] == expect["stop"])
+        for key in ("on_time",):
+            if key in expect:
+                assert entry[key] == expect[key], (expect, entry)
+        for delivered in expect.get("in_spec", {}).items():
+            got = next(d for d in entry["delivered"] if d["shipment_id"] == delivered[0])
+            assert got["in_spec"] == delivered[1], (expect, got)
     if "expect_boot_ids" in labels:
         assert len({r["boot_id"] for r in readings}) == labels["expect_boot_ids"]
 

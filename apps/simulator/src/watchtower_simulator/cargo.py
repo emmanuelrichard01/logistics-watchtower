@@ -21,13 +21,13 @@ class CargoProfile:
     box_humidity_pct: float = 60.0  # equilibrium box RH with the door shut
     q10: float = 2.0
 
-    def capacity_kj_per_k(self, pallets: int) -> float:
+    def capacity_kj_per_k(self, pallets: float) -> float:
         return pallets * self.kg_per_pallet * self.specific_heat_kj_per_kg_k
 
-    def cargo_ua_kw_per_k(self, pallets: int) -> float:
+    def cargo_ua_kw_per_k(self, pallets: float) -> float:
         return pallets * self.ua_per_pallet_kw_per_k
 
-    def respiration_kw(self, pallets: int, cargo_c: float) -> float:
+    def respiration_kw(self, pallets: float, cargo_c: float) -> float:
         if self.respiration_kw_per_pallet == 0.0:
             return 0.0
         rate = self.q10 ** ((cargo_c - self.setpoint_c) / 10.0)

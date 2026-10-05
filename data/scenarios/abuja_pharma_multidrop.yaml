@@ -1,0 +1,27 @@
+# VAN-ABJ1 loads at the Idu hub and works the Abuja pharma round: insulin and vaccines for
+# pharmacies and hospitals, plus produce for a supermarket and a hotel. Every drop opens the
+# door; at Maitama hospital the door isn't latched and swings open for 30 minutes on the way
+# to Asokoro. Vaccines travel in insulated shippers; two consignments of loose insulin
+# cartons don't. Loose cartons suffer at every long drop, and the open door finishes them:
+# both arrive out of spec.
+# Correct behaviour: door-open-while-moving alert, per-shipment exposure, and a delivery
+# flagged out of spec at the receiver, with the round's on-time record alongside.
+name: abuja_pharma_multidrop
+seed: 1201
+start: 2026-10-06T06:00:00Z   # Tuesday 07:00 WAT
+duration: 5h
+named_dead_zones: false
+fleet:
+  - vehicle_id: VAN-ABJ1
+    route: ABJ-U1
+    vehicle_class: van
+    setpoint_c: 5.0
+    dispatch_after: 30m
+    shipments:
+      - {id: SHP-ABJ-001, profile: fresh_produce, kg: 150, receiver: ABJ-U1-01, packaging: carton}
+      - {id: SHP-ABJ-002, profile: pharma_2_8, kg: 25, receiver: ABJ-U1-02, packaging: insulated_box}
+      - {id: SHP-ABJ-003, profile: pharma_2_8, kg: 60, receiver: ABJ-U1-03, packaging: insulated_box}
+      - {id: SHP-ABJ-004, profile: pharma_2_8, kg: 45, receiver: ABJ-U1-04, packaging: carton}
+      - {id: SHP-ABJ-005, profile: pharma_2_8, kg: 20, receiver: ABJ-U1-05, packaging: carton}
+      - {id: SHP-ABJ-006, profile: fresh_produce, kg: 80, receiver: ABJ-U1-06, packaging: carton}
+    door_ajar: {ABJ-U1-03: 30m}

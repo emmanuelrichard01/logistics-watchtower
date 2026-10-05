@@ -21,12 +21,19 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from watchtower_simulator.ambient import ambient_rh_pct
-from watchtower_simulator.cargo import PROFILES, CargoProfile
+from watchtower_simulator.cargo import CargoProfile
 from watchtower_simulator.channel import Channel
 from watchtower_simulator.clock import iso, rng, to_datetime, to_ms
 from watchtower_simulator.device import Delivery, DeliveryPolicy, Device, Reading
 from watchtower_simulator.environment import Conditions, Weather, conditions
 from watchtower_simulator.faults import ClockSkew, Fault, make_fault
+from watchtower_simulator.fleet import (
+    VEHICLE_CLASSES,
+    Shipment,
+    VehicleClass,
+    parse_shipments,
+    sample_drop,
+)
 from watchtower_simulator.incidents import Detour
 from watchtower_simulator.operations import (
     DRIVERS,
@@ -36,25 +43,24 @@ from watchtower_simulator.operations import (
     road_features,
 )
 from watchtower_simulator.reefer import Reefer, ReeferParams
+from watchtower_simulator.rounds import DeliveryRound, log_entry, plan_round
 from watchtower_simulator.routes import Route, load_routes
 from watchtower_simulator.scenario import Event, Scenario, VehicleSpec, duration_ms
 from watchtower_simulator.stops import STOP_TYPES, StopType, door_open_seconds
 from watchtower_simulator.thermal import (
     Inputs,
-    Load,
     ThermalParams,
     ThermalState,
-    step,
+    step_multi,
     supply_air_c,
 )
 
 MAX_STEP_MS = 5_000
 RECORDING_INTERVAL_MS = 15_000
 SCHEMA_VERSION = 1
-SPEED_BANDS = {"highway": (65.0, 90.0), "urban": (20.0, 45.0)}  # km/h, illustrative
-TANK_LITRES = 400.0
-LITRES_PER_KM = 0.35
 ENGINE_OFF_AFTER_S = 600.0  # drivers switch the engine off on longer stops
+DOCK_AIR_C = 12.0  # chilled loading dock at a cold-store hub (illustrative)
+DOOR_AFTER_STOP_MS = 30_000  # drivers pull up, then open the cargo door
 
 
 @dataclass
@@ -83,8 +89,9 @@ class Stop:
 class VehicleSim:
     spec: VehicleSpec
     route: Route
-    profile: CargoProfile
-    load: Load
+    vclass: VehicleClass
+    shipments: list[Shipment]
+    setpoint_c: float
     params: ThermalParams
     reefer: Reefer
     device: Device
@@ -96,7 +103,6 @@ class VehicleSim:
     thermal: ThermalState
     weather: Weather
     km: float
-    pallets: int
     base_interval_ms: int
     burst_interval_ms: int
     speed_kmh: float = 0.0
@@ -105,6 +111,7 @@ class VehicleSim:
     health: float = 1.0
     health_ramp: Ramp | None = None
     fault_code: str | None = None
+    door_from_ms: int = -1
     door_until_ms: int = -1
     stop: Stop | None = None
     forced_defrost_until_ms: int = -1
@@ -117,6 +124,7 @@ class VehicleSim:
     operations: Operations | None = None
     faults: list[Fault] = field(default_factory=lambda: [])
     detour: Detour | None = None  # hijacked off the corridor
+    round: DeliveryRound | None = None  # urban multi-drop round
     open_truth: dict[str, int] = field(default_factory=lambda: {})
 
     _pos_km: float = field(default=-1.0, repr=False)
@@ -129,6 +137,26 @@ class VehicleSim:
         if self.km != self._pos_km:
             self._pos, self._pos_km = self.route.position(self.km), self.km
         return self._pos
+
+    @property
+    def onboard(self) -> list[Shipment]:
+        return [x for x in self.shipments if x.delivered_ms is None]
+
+    @property
+    def profile(self) -> CargoProfile:
+        """The cargo profile at the probe: the first shipment still on board."""
+        onboard = self.onboard
+        return onboard[0].profile if onboard else self.shipments[-1].profile
+
+    @property
+    def cargo_c(self) -> float:
+        """What the cargo probe touches; in an empty box it reads air."""
+        onboard = self.onboard
+        return onboard[0].cargo_c if onboard else self.thermal.air_c
+
+    @property
+    def pallets(self) -> float:
+        return sum(x.pallets for x in self.onboard)
 
     def moving(self) -> bool:
         return self.speed_kmh > 5.0
@@ -145,6 +173,8 @@ class VehicleSim:
         stop = self.active_stop(now)
         if stop is None:
             return True
+        if stop.kind.name == "delivery_drop" and self.vclass.idle_at_drops:
+            return True
         idle_s = (now - stop.started_ms) / 1000
         return not stop.kind.engine_off or idle_s < ENGINE_OFF_AFTER_S
 
@@ -155,6 +185,7 @@ class Result:
     recording: list[dict[str, Any]]
     truth: list[dict[str, Any]]
     dropped: dict[str, int]
+    stops: list[dict[str, Any]] = field(default_factory=lambda: [])
 
 
 def step_for(scenario: Scenario) -> int:
@@ -194,22 +225,29 @@ class Simulation:
     def add_vehicle(self, spec: VehicleSpec) -> VehicleSim:
         s = self.scenario
         route = self.routes[spec.route]
-        profile = PROFILES[spec.cargo_profile]
-        air = spec.initial_air_c if spec.initial_air_c is not None else profile.setpoint_c
-        cargo = spec.initial_cargo_c if spec.initial_cargo_c is not None else profile.setpoint_c
+        vclass = VEHICLE_CLASSES[spec.extra.get("vehicle_class", "trailer")]
+        shipments = parse_shipments(
+            spec.vehicle_id, spec.extra, spec.cargo_profile, spec.pallets, spec.initial_cargo_c
+        )
+        profile = shipments[0].profile
+        setpoint = float(spec.extra.get("setpoint_c", profile.setpoint_c))
+        air = spec.initial_air_c if spec.initial_air_c is not None else setpoint
         stream = rng(s.seed, spec.vehicle_id, "setup")
         v = VehicleSim(
             spec=spec,
             route=route,
-            profile=profile,
-            load=Load(
-                profile.capacity_kj_per_k(spec.pallets), profile.cargo_ua_kw_per_k(spec.pallets)
-            ),
-            params=replace(self.params, **spec.extra.get("thermal", {})),
+            vclass=vclass,
+            shipments=shipments,
+            setpoint_c=setpoint,
+            params=replace(self.params, **{**vclass.thermal, **spec.extra.get("thermal", {})}),
             reefer=Reefer(
-                params=replace(self.reefer_params, **spec.extra.get("reefer", {})),
+                params=replace(
+                    self.reefer_params, **{**(vclass.reefer or {}), **spec.extra.get("reefer", {})}
+                ),
                 humidity_pct=profile.box_humidity_pct,
-                genset_l=float(spec.extra.get("genset_l", stream.uniform(60.0, 170.0))),
+                genset_l=float(spec.extra.get("genset_l", stream.uniform(60.0, 170.0)))
+                if vclass.standby_genset
+                else 0.0,
                 # Stagger the defrost schedule so a fleet doesn't defrost in lockstep.
                 last_defrost_end_ms=s.start_ms - int(stream.uniform(0, 6) * 3_600_000),
             ),
@@ -224,16 +262,28 @@ class Simulation:
             sensor=rng(s.seed, spec.vehicle_id, "sensor"),
             ops=rng(s.seed, spec.vehicle_id, "ops"),
             fault_rng=rng(s.seed, spec.vehicle_id, "faults"),
-            thermal=ThermalState(air_c=air, cargo_c=cargo),
+            thermal=ThermalState(air_c=air, cargo_c=shipments[0].cargo_c),
             weather=Weather(rng(s.seed, spec.vehicle_id, "weather")),
             km=spec.start_km,
-            pallets=spec.pallets,
             base_interval_ms=spec.sample_interval_ms or s.sample_interval_ms,
             burst_interval_ms=spec.burst_interval_ms or s.burst_interval_ms,
             fuel_pct=float(spec.extra.get("fuel_pct", stream.uniform(55.0, 95.0))),
         )
         if spec.stopped:
             v.stop = Stop(STOP_TYPES["depot_loading"], s.start_ms, s.start_ms + s.duration_ms + 1)
+        if route.kind == "urban":
+            dispatch_ms = s.start_ms + duration_ms(spec.extra.get("dispatch_after", "0s"))
+            v.round = plan_round(route, spec.start_km, dispatch_ms)
+            v.round.door_ajar_s = {
+                k: duration_ms(x) / 1000 for k, x in spec.extra.get("door_ajar", {}).items()
+            }
+            if dispatch_ms > s.start_ms:  # loading at the hub on shore power
+                v.stop = Stop(STOP_TYPES["depot_loading"], s.start_ms, dispatch_ms, "loading")
+                median_s = 60 * vclass.loading_door_median_min
+                door_s = min(
+                    median_s * math.exp(v.ops.gauss(0.0, 0.4)), (dispatch_ms - s.start_ms) / 1000
+                )
+                v.door_until_ms = s.start_ms + int(door_s * 1000)
         if s.operations:
             v.operations = Operations(
                 driver=DRIVERS[spec.extra.get("driver", "normal")],
@@ -340,23 +390,21 @@ class Simulation:
     def finish(self) -> Result:
         for v in self.vehicles.values():
             for kind, start in v.open_truth.items():
-                self.truth.append(
-                    {
-                        "vehicle_id": v.spec.vehicle_id,
-                        "kind": kind,
-                        "start": iso(start),
-                        "end": None,
-                    }
-                )
+                self.truth.append(truth_row(v.spec.vehicle_id, kind, start, None))
             v.open_truth.clear()
         self.truth.sort(key=lambda r: (r["start"], r["vehicle_id"], r["kind"]))
         self.deliveries.sort(key=lambda d: (d[0].ingest_ms, d[1], d[0].reading["seq"], d[0].copy))
         readings = [self.materialise(d) for d, _ in self.deliveries]
+        stops = sorted(
+            (entry for v in self.vehicles.values() if v.round for entry in v.round.log),
+            key=lambda e: (e["actual_arrival"], e["vehicle_id"]),
+        )
         return Result(
             readings,
             self.recording,
             self.truth,
             {vid: v.device.dropped for vid, v in sorted(self.vehicles.items())},
+            stops,
         )
 
     # -- per-vehicle behaviour -----------------------------------------------------------
@@ -365,7 +413,11 @@ class Simulation:
         return now < v.forced_defrost_until_ms or v.reefer.defrosting()
 
     def power_available(self, v: VehicleSim) -> bool:
-        return not (v.reefer.power_source == "GENSET" and v.reefer.genset_l <= 0.0)
+        source = v.reefer.power_source
+        return source != "NONE" and not (source == "GENSET" and v.reefer.genset_l <= 0.0)
+
+    def door_open(self, v: VehicleSim, now: int) -> bool:
+        return v.door_from_ms <= now < v.door_until_ms
 
     def environment(self, v: VehicleSim, now: int) -> Conditions:
         lat, lon, heading = v.position()
@@ -379,21 +431,20 @@ class Simulation:
         return Inputs(
             ambient_c=c.ambient_c,
             extra_heat_kw=c.solar_heat_kw,
-            setpoint_c=v.profile.setpoint_c,
+            setpoint_c=v.setpoint_c,
             health=v.health,
-            door_open=now < v.door_until_ms,
+            door_open=self.door_open(v, now),
             defrost=self.defrosting(v, now),
             capacity_factor=v.reefer.capacity_factor() if self.power_available(v) else 0.0,
-            cargo_heat_kw=v.profile.respiration_kw(v.pallets, v.thermal.cargo_c),
+            door_air_c=DOCK_AIR_C if (st := v.active_stop(now)) and st.kind.shore_power else None,
         )
 
     def alarm(self, v: VehicleSim, i: Inputs) -> bool:
         """Conditions under which the device reports at its burst interval."""
-        t = v.thermal
-        air_out = not (v.profile.min_c - 2.0 <= t.air_c <= v.profile.max_c + 2.0)
-        return (
-            not v.profile.in_range(t.cargo_c) or air_out or i.door_open or v.fault_code is not None
-        )
+        air = v.thermal.air_c
+        air_out = not (v.profile.min_c - 2.0 <= air <= v.profile.max_c + 2.0)
+        cargo_out = any(not x.in_range() for x in v.onboard)
+        return cargo_out or air_out or i.door_open or v.fault_code is not None
 
     def observe(self, v: VehicleSim, now: int, *, record: bool) -> list[tuple[Delivery, str]]:
         if v.health_ramp is not None:
@@ -407,7 +458,7 @@ class Simulation:
         v.link_up = v.channel.step(p_drop, segment.p_recover, self.step_ms / 1000, forced)
         v.signal_dbm = v.channel.signal_dbm(v.link_up)
         i = self.inputs(v, now)
-        excursion = not v.profile.in_range(v.thermal.cargo_c)
+        excursion = any(not x.in_range() for x in v.onboard)
 
         interval = v.burst_interval_ms if self.alarm(v, i) else v.base_interval_ms
         tracker_off = v.detour is not None and v.detour.tracker_off(now)
@@ -432,7 +483,7 @@ class Simulation:
             v,
             now,
             {
-                "cargo_excursion": excursion,
+                **{f"cargo_excursion@{x.shipment_id}": not x.in_range() for x in v.onboard},
                 "door_open_moving": i.door_open and v.moving(),
                 "door_open_stationary": i.door_open and not v.moving(),
                 "link_down": not v.link_up,
@@ -465,11 +516,26 @@ class Simulation:
             v.reefer.power_source = "ENGINE"
         elif stop is not None and stop.kind.shore_power:
             v.reefer.power_source = "SHORE"
-        else:
+        elif v.vclass.standby_genset:
             v.reefer.power_source = "GENSET"
+        else:
+            v.reefer.power_source = "NONE"  # engine off, no genset: the unit is off
 
         i = self.inputs(v, now)
-        v.thermal = step(v.thermal, v.params, v.load, i, dt_s)
+        onboard = v.onboard
+        air, on, temps = step_multi(
+            v.thermal.air_c,
+            v.thermal.compressor_on,
+            [x.cargo_c for x in onboard],
+            [x.load() for x in onboard],
+            [x.profile.respiration_kw(x.pallets, x.cargo_c) for x in onboard],
+            v.params,
+            i,
+            dt_s,
+        )
+        for x, t in zip(onboard, temps, strict=True):
+            x.cargo_c = t
+        v.thermal = ThermalState(air, v.cargo_c, on)
         v.weather.update(now, dt_s)
         v.reefer.update(
             now,
@@ -488,7 +554,7 @@ class Simulation:
         if stopped:
             v.target_kmh = 0.0
         elif now % 60_000 == 0 or v.target_kmh == 0.0:
-            low, high = SPEED_BANDS[v.route.segment(v.km).road_class]
+            low, high = v.vclass.speed_bands[v.route.segment(v.km).road_class]
             target = v.motion.uniform(low, high)
             if ops is not None:
                 target = ops.target_speed(target, v.route, v.km, now)
@@ -503,7 +569,9 @@ class Simulation:
             self.drive_detour(v, now, distance)
             return
         v.km = min(v.route.length_km, v.km + distance)
-        v.fuel_pct = max(0.0, v.fuel_pct - distance * LITRES_PER_KM / TANK_LITRES * 100)
+        v.fuel_pct = max(0.0, v.fuel_pct - distance * v.vclass.l_per_km / v.vclass.tank_l * 100)
+        if v.round is not None and not stopped:
+            self.maybe_drop(v, now)
         if ops is not None and not stopped:
             if ops.harsh_brake(distance):
                 v.speed_kmh *= 0.4
@@ -520,7 +588,7 @@ class Simulation:
         """Off the corridor: drive the side road, then park there for good."""
         d = v.detour
         assert d is not None
-        v.fuel_pct = max(0.0, v.fuel_pct - distance_km * LITRES_PER_KM / TANK_LITRES * 100)
+        v.fuel_pct = max(0.0, v.fuel_pct - distance_km * v.vclass.l_per_km / v.vclass.tank_l * 100)
         if d.stopped_at_ms is not None:
             return
         d.travelled_km = min(d.target_km, d.travelled_km + distance_km)
@@ -545,10 +613,44 @@ class Simulation:
             v.door_until_ms = now + int(door_s * 1000)
         if stop_type == "fuel":
             v.fuel_pct = max(v.fuel_pct, v.ops.uniform(90.0, 98.0))
-        if reason.startswith("drop:"):
-            v.pallets = max(0, v.pallets - int(reason.split(":")[1]))
-            capacity = v.profile.capacity_kj_per_k(v.pallets)
-            v.load = Load(max(capacity, 1.0), v.profile.cargo_ua_kw_per_k(v.pallets))
+        if reason.startswith("drop:") and v.onboard:
+            first = v.onboard[0]
+            first.pallets = max(0.0, first.pallets - int(reason.split(":")[1]))
+
+    def maybe_drop(self, v: VehicleSim, now: int) -> None:
+        """On an urban round: stop at the next customer once reached, deliver its shipments,
+        log arrival against the plan and window."""
+        r = v.round
+        assert r is not None
+        stop = r.next_stop()
+        if stop is None or v.km < stop.km:
+            return
+        r.next_index += 1
+        v.km = stop.km
+        dwell_s, door_s = sample_drop(stop.stop_type, v.ops)
+        v.stop = Stop(
+            STOP_TYPES["delivery_drop"], now, now + int(dwell_s * 1000), f"drop:{stop.stop_id}"
+        )
+        v.door_from_ms = now + DOOR_AFTER_STOP_MS
+        v.door_until_ms = v.door_from_ms + int(door_s * 1000)
+        if stop.stop_id in r.door_ajar_s:
+            # Not latched on leaving: the door swings open on the move.
+            v.door_until_ms = now + int((dwell_s + r.door_ajar_s[stop.stop_id]) * 1000)
+        delivered = []
+        for x in v.onboard:
+            if x.receiver == stop.stop_id:
+                x.delivered_ms = now
+                delivered.append(
+                    {
+                        "shipment_id": x.shipment_id,
+                        "profile": x.profile.name,
+                        "cargo_c": round(x.cargo_c, 2),
+                        "in_spec": x.in_range(),
+                    }
+                )
+        r.log.append(
+            log_entry(v.spec.vehicle_id, v.route.route_id, stop, now, dwell_s, door_s, delivered)
+        )
 
     def stop_flags(self, v: VehicleSim, now: int) -> dict[str, bool]:
         active = v.active_stop(now)
@@ -595,14 +697,16 @@ class Simulation:
                 "hdop": round(v.sensor.uniform(0.7, 1.4), 1),
             },
             "reefer": {
-                "setpoint_c": v.profile.setpoint_c,
+                "setpoint_c": v.setpoint_c,
                 "supply_air_c": self.probe(v, supply_air_c(t, v.params, i)),
                 "return_air_c": self.probe(v, t.return_air_c),
-                "cargo_probe_c": self.probe(v, t.cargo_c),
+                "cargo_probe_c": self.probe(v, v.cargo_c),
                 "compressor": self.compressor_state(v, i),
                 "fault_code": v.fault_code,
                 "defrost": i.defrost,
-                "power_source": v.reefer.power_source,
+                "power_source": "UNKNOWN"
+                if v.reefer.power_source == "NONE"
+                else v.reefer.power_source,
                 "door": "OPEN" if i.door_open else "CLOSED",
             },
             "vehicle": {
@@ -627,16 +731,29 @@ class Simulation:
             "lon": round(lon, 6),
             "speed_kmh": round(v.speed_kmh, 1),
             "heading_deg": round(heading, 1),
+            "vehicle_class": v.vclass.name,
             "cargo_profile": v.profile.name,
-            "pallets": v.pallets,
-            "cargo_weight_kg": round(v.pallets * v.profile.kg_per_pallet),
+            "pallets": round(v.pallets, 2),
+            "cargo_weight_kg": round(sum(x.mass_kg for x in v.onboard)),
+            "shipments": [
+                {
+                    "shipment_id": x.shipment_id,
+                    "profile": x.profile.name,
+                    "cargo_c": round(x.cargo_c, 2),
+                    "min_c": x.profile.min_c,
+                    "max_c": x.profile.max_c,
+                    "receiver": x.receiver,
+                }
+                for x in v.onboard
+            ],
+            "next_stop": (n.stop_id if (n := v.round.next_stop()) else None) if v.round else None,
             "driver": v.operations.driver.name if v.operations else None,
             "stop_reason": (active.reason or active.kind.name) if active else None,
             "fuel_pct": round(v.fuel_pct, 1),
-            "setpoint_c": v.profile.setpoint_c,
+            "setpoint_c": v.setpoint_c,
             "min_c": v.profile.min_c,
             "max_c": v.profile.max_c,
-            "cargo_c": round(t.cargo_c, 2),
+            "cargo_c": round(v.cargo_c, 2),
             "air_c": round(t.return_air_c, 2),
             "supply_air_c": round(supply_air_c(t, v.params, i), 2),
             "ambient_c": round(i.ambient_c, 1),
@@ -671,15 +788,7 @@ class Simulation:
             if active and kind not in v.open_truth:
                 v.open_truth[kind] = now
             elif not active and kind in v.open_truth:
-                start = v.open_truth.pop(kind)
-                self.truth.append(
-                    {
-                        "vehicle_id": v.spec.vehicle_id,
-                        "kind": kind,
-                        "start": iso(start),
-                        "end": iso(now),
-                    }
-                )
+                self.truth.append(truth_row(v.spec.vehicle_id, kind, v.open_truth.pop(kind), now))
 
     @staticmethod
     def materialise(d: Delivery) -> dict[str, Any]:
@@ -701,6 +810,20 @@ class Simulation:
             "link",
         ]
         return {k: record[k] for k in order}
+
+
+def truth_row(vehicle_id: str, key: str, start: int, end: int | None) -> dict[str, Any]:
+    """A truth interval. Per-shipment keys look like ``cargo_excursion@SHP-1``."""
+    kind, _, shipment = key.partition("@")
+    row: dict[str, Any] = {
+        "vehicle_id": vehicle_id,
+        "kind": kind,
+        "start": iso(start),
+        "end": iso(end) if end is not None else None,
+    }
+    if shipment:
+        row["shipment_id"] = shipment
+    return row
 
 
 def iter_jsonl_ready(records: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:

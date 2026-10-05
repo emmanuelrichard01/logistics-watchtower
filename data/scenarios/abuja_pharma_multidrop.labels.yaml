@@ -1,0 +1,12 @@
+scenario: abuja_pharma_multidrop
+expect:
+  - {vehicle: VAN-ABJ1, kind: door_open_moving, present: true}   # the unlatched door after Maitama
+  - {vehicle: VAN-ABJ1, kind: cargo_excursion, shipment: SHP-ABJ-004, present: true}
+  - {vehicle: VAN-ABJ1, kind: cargo_excursion, shipment: SHP-ABJ-005, present: true}
+  - {vehicle: VAN-ABJ1, kind: cargo_excursion, shipment: SHP-ABJ-002, present: false}   # insulated shipper
+  - {vehicle: VAN-ABJ1, kind: cargo_excursion, shipment: SHP-ABJ-003, present: false}   # insulated shipper
+stops:
+  - {stop: ABJ-U1-02, in_spec: {SHP-ABJ-002: true}}
+  - {stop: ABJ-U1-03, in_spec: {SHP-ABJ-003: true}}
+  - {stop: ABJ-U1-04, in_spec: {SHP-ABJ-004: false}}
+  - {stop: ABJ-U1-05, in_spec: {SHP-ABJ-005: false}}

@@ -38,6 +38,9 @@ def run(args: argparse.Namespace) -> None:
     if args.truth:
         n = write_jsonl(Path(args.truth), result.truth)
         print(f"{sc.name}: {n} truth intervals -> {args.truth}", file=sys.stderr)
+    if args.stops:
+        n = write_jsonl(Path(args.stops), result.stops)
+        print(f"{sc.name}: {n} stop visits -> {args.stops}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -50,6 +53,9 @@ def main(argv: list[str] | None = None) -> None:
     p_run.add_argument("--out", required=True, help="telemetry readings, in gateway arrival order")
     p_run.add_argument("--recording", help="fleet-state rows every 15 simulated seconds")
     p_run.add_argument("--truth", help="ground-truth intervals")
+    p_run.add_argument(
+        "--stops", help="urban stop visits: planned versus actual arrival, delivered temps"
+    )
     p_run.add_argument("--duration", help="override the scenario duration, e.g. 2h")
     p_run.set_defaults(func=run)
     args = parser.parse_args(argv)
