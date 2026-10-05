@@ -3,7 +3,6 @@ and the same seed produces byte-identical output."""
 
 import hashlib
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,11 +11,9 @@ import pytest
 from watchtower_contracts import event_id, load_schema
 from watchtower_simulator import scenario as scenarios
 from watchtower_simulator.cli import main
-from watchtower_simulator.clock import to_ms
 from watchtower_simulator.engine import Result, Simulation, iter_jsonl_ready
 from watchtower_simulator.routes import default_data_dir
-from watchtower_simulator.scenario import duration_ms
-from watchtower_simulator.testing import run
+from watchtower_simulator.testing import label_failures, run
 
 NAMES = sorted(
     p.stem
@@ -44,54 +41,7 @@ def test_the_required_scenarios_exist() -> None:
 @pytest.mark.parametrize("name", NAMES)
 def test_ground_truth_labels_hold(name: str) -> None:
     labels = scenarios.load_labels(name)
-    sc = scenarios.load(name)
-    truth = run(name).truth
-    start = sc.start_ms
-
-    def offset(iso: str) -> int:
-        return to_ms(datetime.fromisoformat(iso.replace("Z", "+00:00"))) - start
-
-    for expect in labels["expect"]:
-        found = [
-            t
-            for t in truth
-            if t["vehicle_id"] == expect["vehicle"]
-            and t["kind"] == expect["kind"]
-            and ("shipment" not in expect or t.get("shipment_id") == expect["shipment"])
-        ]
-        assert bool(found) == expect["present"], expect
-        if not found:
-            continue
-        first = found[0]
-        if "starts_after" in expect:
-            assert offset(first["start"]) >= duration_ms(expect["starts_after"]), expect
-        if "starts_within" in expect:
-            windows = [
-                t
-                for t in truth
-                if t["vehicle_id"] == expect["vehicle"] and t["kind"] == expect["starts_within"]
-            ]
-            assert any(
-                w["start"] <= first["start"] and (w["end"] is None or first["start"] < w["end"])
-                for w in windows
-            ), expect
-
-    readings = run(name).readings
-    if labels.get("expect_duplicates"):
-        assert len({r["event_id"] for r in readings}) < len(readings)
-    if labels.get("expect_buffered_readings"):
-        assert any(r["link"]["buffered"] for r in readings)
-    stops = run(name).stops
-    for expect in labels.get("stops", []):
-        entry = next(s for s in stops if s["stop_id"] == expect["stop"])
-        for key in ("on_time",):
-            if key in expect:
-                assert entry[key] == expect[key], (expect, entry)
-        for delivered in expect.get("in_spec", {}).items():
-            got = next(d for d in entry["delivered"] if d["shipment_id"] == delivered[0])
-            assert got["in_spec"] == delivered[1], (expect, got)
-    if "expect_boot_ids" in labels:
-        assert len({r["boot_id"] for r in readings}) == labels["expect_boot_ids"]
+    assert label_failures(run(name), labels, scenarios.load(name).start_ms) == []
 
 
 @pytest.mark.parametrize("name", NAMES)
