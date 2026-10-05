@@ -99,6 +99,7 @@ class Shipment:
     receiver: str | None = None  # stop_id it is delivered to; None stays on board
     delivered_ms: int | None = None
     packaging: str = "pallet"
+    handover_to: str | None = None  # city vehicle that takes it on at the hub
 
     @property
     def mass_kg(self) -> float:
@@ -117,14 +118,15 @@ class Shipment:
 def parse_shipments(vehicle_id: str, spec: dict[str, Any], default_profile: str, pallets: float,
                     initial_c: float | None) -> list[Shipment]:  # fmt: skip
     """Shipments from a vehicle spec's ``shipments`` list, or one shipment for the classic
-    single-load truck (``cargo_profile`` and ``pallets``)."""
+    single-load truck (``cargo_profile`` and ``pallets``). An explicit empty list, or a van
+    waiting for a cross-dock handover, starts empty: never a phantom default load."""
     rows = spec.get("shipments")
-    if not rows:
+    if rows is None and not spec.get("handover_from"):
         profile = PROFILES[default_profile]
         start = initial_c if initial_c is not None else profile.setpoint_c
         return [Shipment(f"{vehicle_id}-S1", profile, pallets, start)]
     out: list[Shipment] = []
-    for n, row in enumerate(rows, start=1):
+    for n, row in enumerate(rows or [], start=1):
         profile = PROFILES[row["profile"]]
         amount = (
             float(row["kg"]) / profile.kg_per_pallet
@@ -134,8 +136,11 @@ def parse_shipments(vehicle_id: str, spec: dict[str, Any], default_profile: str,
         start = float(row["initial_c"]) if "initial_c" in row else profile.setpoint_c
         shipment_id = str(row.get("id", f"{vehicle_id}-S{n}"))
         packaging = str(row.get("packaging", "pallet"))
+        handover = row.get("handover_to")
         out.append(
-            Shipment(shipment_id, profile, amount, start, row.get("receiver"), None, packaging)
+            Shipment(
+                shipment_id, profile, amount, start, row.get("receiver"), None, packaging, handover
+            )
         )
     return out
 

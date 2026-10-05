@@ -1,0 +1,9 @@
+scenario: cross_dock_handover_delay
+expect:
+  - {vehicle: TRK-X01, kind: stop_cross_dock, present: true}
+  - {vehicle: VAN-ABJ2, kind: on_dock, shipment: SHP-X01-A, present: true}
+  - {vehicle: VAN-ABJ2, kind: cargo_excursion, shipment: SHP-X01-A, present: true, starts_within: on_dock}
+  - {vehicle: VAN-ABJ3, kind: on_dock, shipment: SHP-X02-A, present: true}
+  - {vehicle: VAN-ABJ3, kind: cargo_excursion, shipment: SHP-X02-A, present: false}   # routine handover
+stops:
+  - {stop: ABJ-U1-04, in_spec: {SHP-X02-A: true}}

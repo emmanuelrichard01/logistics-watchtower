@@ -31,6 +31,7 @@ STOP_TYPES: dict[str, StopType] = {
         StopType("rest", 0.0, 0.0, 0.0, engine_off=True),
         StopType("breakdown", 0.1, 5.0, 0.5, engine_off=True),
         StopType("unplanned", 0.0, 0.0, 0.0, engine_off=False),
+        StopType("cross_dock", 1.0, 20.0, 0.3, engine_off=True, shore_power=True),
     )
 }
 

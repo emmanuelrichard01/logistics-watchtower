@@ -21,9 +21,10 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from watchtower_simulator.ambient import ambient_rh_pct
-from watchtower_simulator.cargo import CargoProfile
+from watchtower_simulator.cargo import PROFILES, CargoProfile
 from watchtower_simulator.channel import Channel
 from watchtower_simulator.clock import iso, rng, to_datetime, to_ms
+from watchtower_simulator.crossdock import DockedShipment
 from watchtower_simulator.device import Delivery, DeliveryPolicy, Device, Reading
 from watchtower_simulator.environment import Conditions, Weather, conditions
 from watchtower_simulator.faults import ClockSkew, Fault, make_fault
@@ -92,6 +93,7 @@ class VehicleSim:
     route: Route
     vclass: VehicleClass
     shipments: list[Shipment]
+    empty_profile: CargoProfile  # what the box is set up for when nothing is on board
     setpoint_c: float
     params: ThermalParams
     reefer: Reefer
@@ -139,15 +141,23 @@ class VehicleSim:
             self._pos, self._pos_km = self.route.position(self.km), self.km
         return self._pos
 
+    _onboard: list[Shipment] | None = field(default=None, repr=False)
+
     @property
     def onboard(self) -> list[Shipment]:
-        return [x for x in self.shipments if x.delivered_ms is None]
+        """Shipments still on board; cached, refreshed whenever custody changes."""
+        if self._onboard is None:
+            self._onboard = [x for x in self.shipments if x.delivered_ms is None]
+        return self._onboard
+
+    def custody_changed(self) -> None:
+        self._onboard = None
 
     @property
     def profile(self) -> CargoProfile:
         """The cargo profile at the probe: the first shipment still on board."""
         onboard = self.onboard
-        return onboard[0].profile if onboard else self.shipments[-1].profile
+        return onboard[0].profile if onboard else self.empty_profile
 
     @property
     def cargo_c(self) -> float:
@@ -218,6 +228,7 @@ class Simulation:
         self.vehicles: dict[str, VehicleSim] = {}
         for spec in scenario.fleet:
             self.add_vehicle(spec)
+        self.dock: list[DockedShipment] = []
         self.pending: list[Event] = list(scenario.events)
         self.deliveries: list[tuple[Delivery, str]] = []
         self.recording: list[dict[str, Any]] = []
@@ -230,7 +241,7 @@ class Simulation:
         shipments = parse_shipments(
             spec.vehicle_id, spec.extra, spec.cargo_profile, spec.pallets, spec.initial_cargo_c
         )
-        profile = shipments[0].profile
+        profile = shipments[0].profile if shipments else PROFILES[spec.cargo_profile]
         setpoint = float(spec.extra.get("setpoint_c", profile.setpoint_c))
         air = spec.initial_air_c if spec.initial_air_c is not None else setpoint
         stream = rng(s.seed, spec.vehicle_id, "setup")
@@ -239,6 +250,7 @@ class Simulation:
             route=route,
             vclass=vclass,
             shipments=shipments,
+            empty_profile=profile,
             setpoint_c=setpoint,
             params=replace(self.params, **{**vclass.thermal, **spec.extra.get("thermal", {})}),
             reefer=Reefer(
@@ -263,7 +275,7 @@ class Simulation:
             sensor=rng(s.seed, spec.vehicle_id, "sensor"),
             ops=rng(s.seed, spec.vehicle_id, "ops"),
             fault_rng=rng(s.seed, spec.vehicle_id, "faults"),
-            thermal=ThermalState(air_c=air, cargo_c=shipments[0].cargo_c),
+            thermal=ThermalState(air_c=air, cargo_c=shipments[0].cargo_c if shipments else air),
             weather=Weather(rng(s.seed, spec.vehicle_id, "weather")),
             km=spec.start_km,
             base_interval_ms=spec.sample_interval_ms or s.sample_interval_ms,
@@ -272,7 +284,10 @@ class Simulation:
         )
         if spec.stopped:
             v.stop = Stop(STOP_TYPES["depot_loading"], s.start_ms, s.start_ms + s.duration_ms + 1)
-        if route.kind == "urban":
+        if "handover_from" in spec.extra:
+            end = s.start_ms + s.duration_ms + 1
+            v.stop = Stop(STOP_TYPES["depot_loading"], s.start_ms, end, "awaiting_handover")
+        elif route.kind == "urban":
             dispatch_ms = s.start_ms + duration_ms(spec.extra.get("dispatch_after", "0s"))
             v.round = plan_round(route, spec.start_km, dispatch_ms)
             v.round.door_ajar_s = {
@@ -350,6 +365,10 @@ class Simulation:
                     door_open_s=duration_ms(p.get("door_open", "40m")) / 1000,
                     tracker_off_after_s=duration_ms(off) / 1000 if off else None,
                 )
+            case "unload_complete":
+                self.unload(v, now_ms)
+            case "dispatch":
+                self.dispatch(v, now_ms)
             case "sensor_fault":
                 params = {k: x for k, x in p.items() if k not in ("fault", "duration")}
                 if "gps_sync_after" in params:
@@ -374,6 +393,10 @@ class Simulation:
         elapsed = now - self.scenario.start_ms
         while self.pending and self.pending[0].at_ms <= elapsed:
             self.apply(self.pending.pop(0), now)
+        for docked in self.dock:
+            docked.step(self.step_ms / 1000)
+        for vid in sorted(self.vehicles):
+            self.maybe_load(self.vehicles[vid], now)
         produced: list[tuple[Delivery, str]] = []
         for vid in sorted(self.vehicles):
             v = self.vehicles[vid]
@@ -485,6 +508,16 @@ class Simulation:
             now,
             {
                 **{f"cargo_excursion@{x.shipment_id}": not x.in_range() for x in v.onboard},
+                **{
+                    f"cargo_excursion@{d.shipment.shipment_id}": not d.shipment.in_range()
+                    for d in self.dock
+                    if d.to_vehicle == v.spec.vehicle_id
+                },
+                **{
+                    f"on_dock@{d.shipment.shipment_id}": True
+                    for d in self.dock
+                    if d.to_vehicle == v.spec.vehicle_id
+                },
                 "door_open_moving": i.door_open and v.moving(),
                 "door_open_stationary": i.door_open and not v.moving(),
                 "link_down": not v.link_up,
@@ -509,9 +542,18 @@ class Simulation:
         lat, _, _ = v.position()
 
         if v.km >= v.route.length_km and not v.stopped(now):
-            # Arrived: park with the engine off until the run ends.
             end = self.scenario.start_ms + self.scenario.duration_ms + 1
-            v.stop = Stop(STOP_TYPES["rest"], now, end, "arrived")
+            plan = v.spec.extra.get("cross_dock")
+            if plan and any(x.handover_to for x in v.onboard):
+                # Arrived at the hub: unload onto the dock, door open throughout.
+                unload_ms = duration_ms(plan.get("unload", "20m"))
+                v.stop = Stop(STOP_TYPES["cross_dock"], now, now + unload_ms, "cross_dock")
+                v.door_from_ms, v.door_until_ms = now + DOOR_AFTER_STOP_MS, now + unload_ms
+                at = now + unload_ms - self.scenario.start_ms
+                self.schedule(Event(at, v.spec.vehicle_id, "unload_complete", {}))
+            else:
+                # Arrived: park with the engine off until the run ends.
+                v.stop = Stop(STOP_TYPES["rest"], now, end, "arrived")
         stop = v.active_stop(now)
         if v.engine_running(now):
             v.reefer.power_source = "ENGINE"
@@ -621,6 +663,53 @@ class Simulation:
             first = v.onboard[0]
             first.pallets = max(0.0, first.pallets - int(reason.split(":")[1]))
 
+    def unload(self, v: VehicleSim, now: int) -> None:
+        """The truck's handover shipments leave it for the dock; the truck parks."""
+        dock_air = float(v.spec.extra.get("cross_dock", {}).get("dock_air_c", DOCK_AIR_C))
+        for x in v.onboard:
+            if x.handover_to:
+                x.delivered_ms = now
+                v.custody_changed()
+                self.dock.append(DockedShipment(x, v.spec.vehicle_id, x.handover_to, now, dock_air))
+        end = self.scenario.start_ms + self.scenario.duration_ms + 1
+        v.stop = Stop(STOP_TYPES["rest"], now, end, "arrived")
+
+    def expected_handover(self, van_id: str) -> list[Shipment]:
+        return [x for v in self.vehicles.values() for x in v.shipments if x.handover_to == van_id]
+
+    def maybe_load(self, v: VehicleSim, now: int) -> None:
+        """A waiting van starts loading once it's available and everything it expects is on
+        the dock."""
+        stop = v.active_stop(now)
+        if stop is None or stop.reason != "awaiting_handover":
+            return
+        available = self.scenario.start_ms + duration_ms(v.spec.extra.get("available_at", "0s"))
+        expected = self.expected_handover(v.spec.vehicle_id)
+        on_dock = {d.shipment.shipment_id for d in self.dock if d.to_vehicle == v.spec.vehicle_id}
+        if now < available or not expected or any(x.shipment_id not in on_dock for x in expected):
+            return
+        load_ms = duration_ms(v.spec.extra.get("load", "10m"))
+        v.stop = Stop(STOP_TYPES["depot_loading"], now, now + load_ms, "loading")
+        v.door_from_ms, v.door_until_ms = now, now + load_ms
+        self.schedule(
+            Event(now + load_ms - self.scenario.start_ms, v.spec.vehicle_id, "dispatch", {})
+        )
+
+    def dispatch(self, v: VehicleSim, now: int) -> None:
+        """Shipments come off the dock into the van, which plans its round from now."""
+        mine = [d for d in self.dock if d.to_vehicle == v.spec.vehicle_id]
+        self.dock = [d for d in self.dock if d.to_vehicle != v.spec.vehicle_id]
+        for d in mine:
+            x = d.shipment
+            v.shipments.append(
+                Shipment(
+                    x.shipment_id, x.profile, x.pallets, x.cargo_c, x.receiver, None, x.packaging
+                )
+            )
+        v.custody_changed()
+        v.round = plan_round(v.route, v.km, now)
+        v.stop = None
+
     def maybe_drop(self, v: VehicleSim, now: int) -> None:
         """On an urban round: stop at the next customer once reached, deliver its shipments,
         log arrival against the plan and window."""
@@ -647,6 +736,7 @@ class Simulation:
         for x in v.onboard:
             if x.receiver == stop.stop_id:
                 x.delivered_ms = now
+                v.custody_changed()
                 delivered.append(
                     {
                         "shipment_id": x.shipment_id,
@@ -791,6 +881,9 @@ class Simulation:
         }
 
     def track(self, v: VehicleSim, now: int, flags: dict[str, bool]) -> None:
+        for gone in [k for k in v.open_truth if k not in flags]:
+            # A shipment delivered or handed over: its intervals end when custody passes.
+            self.truth.append(truth_row(v.spec.vehicle_id, gone, v.open_truth.pop(gone), now))
         for kind, active in flags.items():
             if active and kind not in v.open_truth:
                 v.open_truth[kind] = now
