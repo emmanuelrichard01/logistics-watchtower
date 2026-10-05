@@ -1,0 +1,12 @@
+# TRK-A21's device clock runs 90 s fast, then the device reboots (new boot_id, seq restarts
+# at 1), and a GPS time sync corrects the clock an hour later. Correct behaviour: event times
+# corrected or flagged, and no false sequence-loss alarm across the reboot.
+name: clock_skew_and_reboot
+seed: 1021
+start: 2026-10-05T09:00:00Z
+duration: 3h
+fleet:
+  - {vehicle_id: TRK-A21, route: RT-PHC-MKD, start_km: 20, cargo_profile: frozen, pallets: 16}
+events:
+  - {at: 10m, vehicle: TRK-A21, type: sensor_fault, fault: clock_skew, offset_s: 90, drift_ppm: 50, gps_sync_after: 110m}
+  - {at: 1h, vehicle: TRK-A21, type: reboot}

@@ -82,14 +82,19 @@ def test_ground_truth_labels_hold(name: str) -> None:
         assert len({r["event_id"] for r in readings}) < len(readings)
     if labels.get("expect_buffered_readings"):
         assert any(r["link"]["buffered"] for r in readings)
+    if "expect_boot_ids" in labels:
+        assert len({r["boot_id"] for r in readings}) == labels["expect_boot_ids"]
 
 
 @pytest.mark.parametrize("name", NAMES)
 def test_every_reading_matches_the_avro_contract(name: str) -> None:
+    # A device with a fast clock can stamp readings "in the future"; everyone else can't.
+    skewed = {t["vehicle_id"] for t in result(name).truth if t["kind"] == "fault_clock_skew"}
     for r in result(name).readings:
         assert fastavro.validate(r, SCHEMA, raise_errors=True)
         assert r["event_id"] == str(event_id(r["device_id"], r["boot_id"], r["seq"]))
-        assert r["ingest_time"] > r["event_time"]
+        if r["vehicle_id"] not in skewed:
+            assert r["ingest_time"] > r["event_time"]
 
 
 @pytest.mark.parametrize("name", NAMES)

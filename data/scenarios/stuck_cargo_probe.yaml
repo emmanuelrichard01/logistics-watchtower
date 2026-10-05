@@ -1,0 +1,12 @@
+# TRK-A01's cargo probe flatlines at about 5 °C; ten minutes later the compressor faults. Air
+# probes warm and the real cargo crosses 8 °C, but the stuck probe keeps reading 5 °C.
+# Correct behaviour: a sensor-fault flag and lowered confidence, never a false all-clear.
+name: stuck_cargo_probe
+seed: 1001
+start: 2026-03-12T10:00:00Z
+duration: 4h
+fleet:
+  - {vehicle_id: TRK-A01, route: RT-LAG-ABJ, start_km: 150, cargo_profile: pharma_2_8, pallets: 4}
+events:
+  - {at: 30m, vehicle: TRK-A01, type: sensor_fault, fault: flatline, probe: cargo_probe}
+  - {at: 40m, vehicle: TRK-A01, type: compressor_fault, code: E-COMP-01}

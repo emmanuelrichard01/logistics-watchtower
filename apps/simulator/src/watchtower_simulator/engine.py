@@ -25,6 +25,7 @@ from watchtower_simulator.channel import Channel
 from watchtower_simulator.clock import iso, rng, to_datetime, to_ms
 from watchtower_simulator.device import Delivery, DeliveryPolicy, Device, Reading
 from watchtower_simulator.environment import Conditions, Weather, conditions
+from watchtower_simulator.faults import ClockSkew, Fault, make_fault
 from watchtower_simulator.operations import (
     DRIVERS,
     Drop,
@@ -89,6 +90,7 @@ class VehicleSim:
     motion: random.Random
     sensor: random.Random
     ops: random.Random
+    fault_rng: random.Random
     thermal: ThermalState
     weather: Weather
     km: float
@@ -111,6 +113,7 @@ class VehicleSim:
     last_event_ms: int | None = None  # freshest reading the gateway has received
     cond: Conditions | None = None  # this tick's environment
     operations: Operations | None = None
+    faults: list[Fault] = field(default_factory=lambda: [])
     open_truth: dict[str, int] = field(default_factory=lambda: {})
 
     _pos_km: float = field(default=-1.0, repr=False)
@@ -215,6 +218,7 @@ class Simulation:
             motion=rng(s.seed, spec.vehicle_id, "motion"),
             sensor=rng(s.seed, spec.vehicle_id, "sensor"),
             ops=rng(s.seed, spec.vehicle_id, "ops"),
+            fault_rng=rng(s.seed, spec.vehicle_id, "faults"),
             thermal=ThermalState(air_c=air, cargo_c=cargo),
             weather=Weather(rng(s.seed, spec.vehicle_id, "weather")),
             km=spec.start_km,
@@ -269,6 +273,12 @@ class Simulation:
                 v.outage_until_ms = until
             case "reboot":
                 v.device.reboot()
+            case "sensor_fault":
+                params = {k: x for k, x in p.items() if k not in ("fault", "duration")}
+                if "gps_sync_after" in params:
+                    params["gps_sync_after_s"] = duration_ms(params.pop("gps_sync_after")) / 1000
+                end = until if "duration" in p else None
+                v.faults.append(make_fault(str(p["fault"]), now_ms, end, params))
             case other:
                 raise ValueError(f"unknown event type {other!r}")
 
@@ -372,7 +382,11 @@ class Simulation:
         interval = v.burst_interval_ms if self.alarm(v, i) else v.base_interval_ms
         if v.last_sample_ms is None or now - v.last_sample_ms >= interval:
             v.last_sample_ms = now
-            reading = v.device.stamp(self.reading(v, i, lat, lon, heading), now)
+            reading = self.reading(v, i, lat, lon, heading)
+            for fault in v.faults:
+                if fault.active(now):
+                    fault.apply(reading, now, v.fault_rng)
+            reading = v.device.stamp(reading, now + self.clock_skew_ms(v, now))
             out = v.device.handle(reading, now, v.link_up, excursion)
         else:
             out = v.device.drain(now, v.link_up)
@@ -394,6 +408,7 @@ class Simulation:
                 "reefer_power_lost": not self.power_available(v),
                 "storm": c.storm,
                 **self.stop_flags(v, now),
+                **self.fault_flags(v, now),
             },
         )
         if record:
@@ -476,6 +491,15 @@ class Simulation:
         active = v.active_stop(now)
         name = active.kind.name if active is not None else None
         return {f"stop_{t}": name == t for t in STOP_TYPES}
+
+    def clock_skew_ms(self, v: VehicleSim, now: int) -> int:
+        return sum(f.skew_ms(now) for f in v.faults if isinstance(f, ClockSkew))
+
+    def fault_flags(self, v: VehicleSim, now: int) -> dict[str, bool]:
+        flags: dict[str, bool] = {}
+        for f in v.faults:
+            flags[f.truth_kind] = flags.get(f.truth_kind, False) or f.active(now)
+        return flags
 
     def point_truth(self, v: VehicleSim, now: int, kind: str) -> None:
         self.truth.append(
@@ -568,6 +592,7 @@ class Simulation:
             "defrost": i.defrost,
             "power_source": r.power_source,
             "genset_fuel_l": round(r.genset_l, 1),
+            "faults": sorted({f.truth_kind for f in v.faults if f.active(now)}),
             "link_up": v.link_up,
             "signal_dbm": v.signal_dbm,
             "buffered": bool(v.device.buffer),

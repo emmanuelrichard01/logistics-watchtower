@@ -67,6 +67,7 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `defrost` | boolean | Defrost cycle in progress (scheduled about every 6 h, or on demand) |
 | `power_source` | string | `ENGINE`, `GENSET` (engine off away from a depot) or `SHORE` (plugged in at a depot) |
 | `genset_fuel_l` | number | Reefer genset diesel left |
+| `faults` | string[] | Injected sensor or device faults active now, e.g. `fault_flatline_cargo_probe`, `fault_clock_skew` (ground truth; empty normally) |
 | `link_up` | boolean | Cellular link up at this moment |
 | `signal_dbm` | integer or null | Null while the link is down |
 | `buffered` | boolean | The device is holding unsent readings |
