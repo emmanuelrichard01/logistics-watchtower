@@ -1,0 +1,6 @@
+scenario: dead_zone_with_excursion
+expect:
+  - {vehicle: TRK-501, kind: link_down, present: true}
+  - {vehicle: TRK-501, kind: cargo_excursion, present: true, starts_within: link_down}
+  - {vehicle: TRK-502, kind: cargo_excursion, present: false}
+expect_buffered_readings: true

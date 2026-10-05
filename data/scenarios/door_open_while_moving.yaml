@@ -1,0 +1,13 @@
+# TRK-301's door opens for 8 minutes at highway speed. Correct behaviour: a CRITICAL
+# door-open-while-moving alert, with return air rising to corroborate. Frozen cargo has the
+# thermal mass to ride it out, so there's no cargo excursion.
+name: door_open_while_moving
+seed: 301
+start: 2026-01-20T13:00:00Z   # 14:00 WAT, Harmattan afternoon
+duration: 2h
+sample_interval: 30s
+fleet:
+  - {vehicle_id: TRK-301, route: RT-BEN-ABJ, start_km: 25, cargo_profile: frozen, pallets: 20}
+  - {vehicle_id: TRK-302, route: RT-PHC-MKD, start_km: 140, cargo_profile: frozen, pallets: 16}
+events:
+  - {at: 40m, vehicle: TRK-301, type: door_open, duration: 8m}

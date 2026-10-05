@@ -1,0 +1,13 @@
+# TRK-401 loads at the Lagos depot with the door open for 20 minutes while stationary, then
+# departs. Correct behaviour: low severity or none, because a stationary door at a depot is
+# expected; no door-open-while-moving alert.
+name: door_open_at_depot
+seed: 401
+start: 2026-06-15T05:30:00Z   # 06:30 WAT, rainy season
+duration: 90m
+sample_interval: 30s
+fleet:
+  - {vehicle_id: TRK-401, route: RT-LAG-ABJ, start_km: 0.2, cargo_profile: pharma_2_8, pallets: 8}
+events:
+  - {at: 0s, vehicle: TRK-401, type: stop, duration: 40m}
+  - {at: 10m, vehicle: TRK-401, type: door_open, duration: 20m}

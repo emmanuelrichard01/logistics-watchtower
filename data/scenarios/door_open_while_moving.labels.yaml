@@ -1,0 +1,5 @@
+scenario: door_open_while_moving
+expect:
+  - {vehicle: TRK-301, kind: door_open_moving, present: true}
+  - {vehicle: TRK-301, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-302, kind: door_open_moving, present: false}

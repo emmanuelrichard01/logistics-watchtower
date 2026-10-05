@@ -1,0 +1,5 @@
+scenario: compressor_hard_fail
+expect:
+  - {vehicle: TRK-201, kind: compressor_fault, present: true}
+  - {vehicle: TRK-201, kind: cargo_excursion, present: true, starts_after: 20m}
+  - {vehicle: TRK-202, kind: cargo_excursion, present: false}

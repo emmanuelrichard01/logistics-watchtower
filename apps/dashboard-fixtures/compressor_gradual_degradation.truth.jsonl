@@ -1,0 +1,4 @@
+{"vehicle_id":"TRK-101","kind":"link_down","start":"2026-03-12T07:20:50.000Z","end":"2026-03-12T07:23:35.000Z"}
+{"vehicle_id":"TRK-102","kind":"link_down","start":"2026-03-12T07:30:30.000Z","end":"2026-03-12T07:32:05.000Z"}
+{"vehicle_id":"TRK-101","kind":"compressor_degraded","start":"2026-03-12T07:35:40.000Z","end":null}
+{"vehicle_id":"TRK-103","kind":"link_down","start":"2026-03-12T07:55:55.000Z","end":"2026-03-12T07:58:15.000Z"}

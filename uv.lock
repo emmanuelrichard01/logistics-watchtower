@@ -7,6 +7,7 @@ members = [
     "watchtower",
     "watchtower-contracts",
     "watchtower-domain",
+    "watchtower-simulator",
 ]
 
 [[package]]
@@ -347,3 +348,18 @@ source = { editable = "packages/contracts" }
 name = "watchtower-domain"
 version = "2.0.0.dev0"
 source = { editable = "packages/domain" }
+
+[[package]]
+name = "watchtower-simulator"
+version = "2.0.0.dev0"
+source = { editable = "apps/simulator" }
+dependencies = [
+    { name = "pyyaml" },
+    { name = "watchtower-contracts" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "watchtower-contracts", editable = "packages/contracts" },
+]

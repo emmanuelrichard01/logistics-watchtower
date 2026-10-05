@@ -1,0 +1,12 @@
+# TRK-201's compressor fails outright with a fault code. Correct behaviour: a fast CRITICAL
+# COMPRESSOR_FAULT, then a time-to-breach that counts down as the cargo warms.
+name: compressor_hard_fail
+seed: 201
+start: 2026-03-12T10:00:00Z   # 11:00 WAT
+duration: 3h
+sample_interval: 30s
+fleet:
+  - {vehicle_id: TRK-201, route: RT-LAG-ABJ, start_km: 200, cargo_profile: pharma_2_8, pallets: 4}
+  - {vehicle_id: TRK-202, route: RT-BEN-ABJ, start_km: 30, cargo_profile: frozen, pallets: 20}
+events:
+  - {at: 20m, vehicle: TRK-201, type: compressor_fault, code: E-COMP-01}

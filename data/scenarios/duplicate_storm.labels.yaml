@@ -1,0 +1,6 @@
+scenario: duplicate_storm
+expect:
+  - {vehicle: TRK-701, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-702, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-703, kind: cargo_excursion, present: false}
+expect_duplicates: true

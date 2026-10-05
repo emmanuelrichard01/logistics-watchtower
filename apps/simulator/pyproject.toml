@@ -1,0 +1,22 @@
+[project]
+name = "watchtower-simulator"
+version = "2.0.0.dev0"
+description = "Deterministic, scenario-driven fleet simulator: routes, two-node reefer thermal model, dead zones, edge buffering."
+authors = [
+    { name = "emmanuelrichard01", email = "emma.moghalu@gmail.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pyyaml>=6",
+    "watchtower-contracts",
+]
+
+[project.scripts]
+wt-sim = "watchtower_simulator.cli:main"
+
+[tool.uv.sources]
+watchtower-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"

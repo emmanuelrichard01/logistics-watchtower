@@ -1,0 +1,21 @@
+# Compressor health on TRK-101 (pharma, 2-8 °C, an aged trailer with worn insulation) falls
+# from 1.0 to 0.2 over 90 minutes during a hot dry-season day. Cargo thermal mass makes the
+# breach arrive hours later, which is the lead time a forecaster should exploit.
+# Correct behaviour: a time-to-breach warning well before cargo crosses 8 °C (plan section 8).
+name: compressor_gradual_degradation
+seed: 101
+start: 2026-03-12T07:00:00Z   # 08:00 WAT, March: peak dry-season heat
+duration: 8h
+sample_interval: 30s
+fleet:
+  - vehicle_id: TRK-101
+    route: RT-LAG-ABJ
+    start_km: 95
+    cargo_profile: pharma_2_8
+    pallets: 4
+    thermal: {wall_ua_kw_per_k: 0.12}   # aged trailer, illustrative
+  - {vehicle_id: TRK-102, route: RT-PHC-MKD, start_km: 40, cargo_profile: frozen, pallets: 20}
+  - {vehicle_id: TRK-103, route: RT-BEN-ABJ, start_km: 20, cargo_profile: frozen, pallets: 18}
+  - {vehicle_id: TRK-104, route: RT-LAG-ABJ, start_km: 260, cargo_profile: pharma_2_8, pallets: 6}
+events:
+  - {at: 30m, vehicle: TRK-101, type: compressor_health, to: 0.2, over: 90m}

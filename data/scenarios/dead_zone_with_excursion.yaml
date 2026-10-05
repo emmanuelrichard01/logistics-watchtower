@@ -1,0 +1,15 @@
+# TRK-501 (pharma) was loaded slightly warm and its compressor faults just before a 35-minute
+# outage; the cargo crosses 8 °C while the truck is unreachable. Correct behaviour: the edge
+# alarm fires offline; on replay, the alert carries the true event-time start and duration.
+name: dead_zone_with_excursion
+seed: 501
+start: 2026-03-12T11:00:00Z
+duration: 2h
+sample_interval: 30s
+named_dead_zones: false   # the outage below is the only one, for a clean test
+fleet:
+  - {vehicle_id: TRK-501, route: RT-LAG-ABJ, start_km: 300, cargo_profile: pharma_2_8, pallets: 4, initial_cargo_c: 7.2, initial_air_c: 6.0}
+  - {vehicle_id: TRK-502, route: RT-LAG-ABJ, start_km: 320, cargo_profile: frozen, pallets: 20}
+events:
+  - {at: 2m, vehicle: TRK-501, type: compressor_fault, code: E-COMP-01}
+  - {at: 25m, vehicle: TRK-501, type: link_outage, duration: 35m}

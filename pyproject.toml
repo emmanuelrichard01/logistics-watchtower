@@ -21,6 +21,8 @@ package = false
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
+# Non-Python apps and data directories under apps/
+exclude = ["apps/dashboard", "apps/dashboard-fixtures"]
 
 [tool.ruff]
 line-length = 100
@@ -32,7 +34,7 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "PT", "N"]
 
 [tool.pyright]
 pythonVersion = "3.12"
-include = ["packages", "tests"]
+include = ["apps", "packages", "tests"]
 exclude = ["legacy", "**/.venv", "**/__pycache__"]
 typeCheckingMode = "standard"
 strict = ["packages/contracts", "packages/domain"]
