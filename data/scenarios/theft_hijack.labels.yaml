@@ -1,0 +1,8 @@
+scenario: theft_hijack
+expect:
+  - {vehicle: TRK-B01, kind: route_deviation, present: true, starts_after: 40m}
+  - {vehicle: TRK-B01, kind: unexplained_stop, present: true}
+  - {vehicle: TRK-B01, kind: door_open_stationary, present: true, starts_within: unexplained_stop}
+  - {vehicle: TRK-B01, kind: tracker_offline, present: true}
+  - {vehicle: TRK-B01, kind: door_open_moving, present: false}
+  - {vehicle: TRK-B02, kind: route_deviation, present: false}

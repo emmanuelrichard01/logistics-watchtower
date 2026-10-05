@@ -1,0 +1,11 @@
+# TRK-601 runs a normal 25-minute defrost. Return air rises briefly; cargo doesn't move.
+# Correct behaviour: no alert, because the defrost is recognised.
+name: defrost_cycle
+seed: 601
+start: 2026-03-12T12:00:00Z
+duration: 2h
+sample_interval: 30s
+fleet:
+  - {vehicle_id: TRK-601, route: RT-PHC-MKD, start_km: 60, cargo_profile: frozen, pallets: 20}
+events:
+  - {at: 30m, vehicle: TRK-601, type: defrost, duration: 25m}

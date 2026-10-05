@@ -1,0 +1,29 @@
+# Two inter-state trailers arrive at the Abuja hub before dawn and hand over to city vans.
+# TRK-X02's pallets go straight into the chilled dock and VAN-ABJ3 loads them 40 minutes
+# later: routine. TRK-X01's cold room is full, so its pallets wait on the open dock in 29 °C
+# air, and VAN-ABJ2's driver is late: the loose vaccine cartons breach on the dock, before any
+# van has them. Correct behaviour: the excursion is attributed to the handover (on_dock), not
+# to either vehicle's reefer, and the late van is the root cause in the evidence.
+name: cross_dock_handover_delay
+seed: 1401
+start: 2026-10-06T03:30:00Z   # 04:30 WAT
+duration: 8h
+named_dead_zones: false
+fleet:
+  - vehicle_id: TRK-X01
+    route: RT-LAG-ABJ
+    start_km: 795
+    cross_dock: {unload: 20m, dock_air_c: 29.0}
+    shipments:
+      - {id: SHP-X01-A, profile: pharma_2_8, kg: 300, receiver: ABJ-U1-03, handover_to: VAN-ABJ2, packaging: carton}
+      - {id: SHP-X01-B, profile: pharma_2_8, kg: 120, receiver: ABJ-U1-02, handover_to: VAN-ABJ2, packaging: insulated_box}
+      - {id: SHP-X01-C, profile: fresh_produce, kg: 400, receiver: ABJ-U1-01, handover_to: VAN-ABJ2}
+  - vehicle_id: TRK-X02
+    route: RT-LAG-ABJ
+    start_km: 790
+    cross_dock: {unload: 20m}
+    shipments:
+      - {id: SHP-X02-A, profile: pharma_2_8, kg: 200, receiver: ABJ-U1-04, handover_to: VAN-ABJ3, packaging: carton}
+      - {id: SHP-X02-B, profile: fresh_produce, kg: 300, receiver: ABJ-U1-06, handover_to: VAN-ABJ3}
+  - {vehicle_id: VAN-ABJ2, route: ABJ-U1, vehicle_class: van, setpoint_c: 5.0, handover_from: TRK-X01, available_at: 3h, load: 10m}
+  - {vehicle_id: VAN-ABJ3, route: ABJ-U1, vehicle_class: van, setpoint_c: 5.0, handover_from: TRK-X02, available_at: 40m, load: 10m}

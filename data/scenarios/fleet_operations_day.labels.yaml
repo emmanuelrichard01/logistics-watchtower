@@ -1,0 +1,10 @@
+scenario: fleet_operations_day
+expect:
+  - {vehicle: TRK-901, kind: stop_checkpoint, present: true}
+  - {vehicle: TRK-901, kind: stop_toll_gate, present: true}
+  - {vehicle: TRK-901, kind: stop_rest, present: true}        # night parking
+  - {vehicle: TRK-902, kind: stop_delivery_drop, present: true}
+  - {vehicle: TRK-903, kind: stop_fuel, present: true, starts_after: 0s}
+  - {vehicle: TRK-903, kind: harsh_brake, present: true}
+  - {vehicle: TRK-901, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-903, kind: cargo_excursion, present: false}

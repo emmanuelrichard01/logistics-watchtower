@@ -62,3 +62,9 @@ graphify-out/
 
 # Agent worktrees (Claude Code parallel tracks)
 .claude/worktrees/
+
+# Raw OSRM responses (regenerate per data/routes/README.md)
+data/routes/osrm/
+
+# Local scratch output
+.tmp/

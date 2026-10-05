@@ -1,0 +1,12 @@
+# TRK-A31 crawls out of Lagos in the morning with urban-canyon multipath (2D fixes, scattered
+# positions, poor HDOP) and occasional GPS jumps of a few km. Correct behaviour: no false
+# route deviation; poor-fix readings are weighted down or flagged.
+name: gps_urban_canyon
+seed: 1031
+start: 2026-10-05T06:30:00Z
+duration: 90m
+fleet:
+  - {vehicle_id: TRK-A31, route: RT-LAG-ABJ, start_km: 1, cargo_profile: frozen, pallets: 20}
+events:
+  - {at: 0s, vehicle: TRK-A31, type: sensor_fault, fault: gps_multipath, sigma_m: 60, duration: 45m}
+  - {at: 10m, vehicle: TRK-A31, type: sensor_fault, fault: gps_jump, probability: 0.05, distance_km: 4, duration: 60m}

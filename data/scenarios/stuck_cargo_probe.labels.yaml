@@ -1,0 +1,5 @@
+scenario: stuck_cargo_probe
+expect:
+  - {vehicle: TRK-A01, kind: fault_flatline_cargo_probe, present: true}
+  - {vehicle: TRK-A01, kind: compressor_fault, present: true}
+  - {vehicle: TRK-A01, kind: cargo_excursion, present: true, starts_after: 40m}   # real, though the probe never shows it

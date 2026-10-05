@@ -1,0 +1,11 @@
+# TRK-A11's cargo probe drifts warm at 0.8 °C an hour while the real cargo holds -20 °C. By
+# the end the probe reads above the -15 °C limit. Correct behaviour: the drift is detected by
+# cross-probe disagreement, and no breach is raised on a healthy load.
+name: sensor_drift
+seed: 1011
+start: 2026-03-12T06:00:00Z
+duration: 9h
+fleet:
+  - {vehicle_id: TRK-A11, route: RT-BEN-ABJ, start_km: 10, cargo_profile: frozen, pallets: 20}
+events:
+  - {at: 1h, vehicle: TRK-A11, type: sensor_fault, fault: drift, probe: cargo_probe, c_per_hour: 0.8}

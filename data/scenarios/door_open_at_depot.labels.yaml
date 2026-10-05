@@ -1,0 +1,4 @@
+scenario: door_open_at_depot
+expect:
+  - {vehicle: TRK-401, kind: door_open_stationary, present: true}
+  - {vehicle: TRK-401, kind: door_open_moving, present: false}

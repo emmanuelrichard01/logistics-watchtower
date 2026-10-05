@@ -1,0 +1,4 @@
+scenario: defrost_cycle
+expect:
+  - {vehicle: TRK-601, kind: defrost, present: true}
+  - {vehicle: TRK-601, kind: cargo_excursion, present: false}

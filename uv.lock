@@ -9,6 +9,7 @@ members = [
     "watchtower-domain",
     "watchtower-gateway",
     "watchtower-platform",
+    "watchtower-simulator",
 ]
 
 [[package]]
@@ -893,6 +894,21 @@ dependencies = [
 requires-dist = [
     { name = "confluent-kafka", specifier = ">=2.6" },
     { name = "fastavro", specifier = ">=1.12.2" },
+]
+
+[[package]]
+name = "watchtower-simulator"
+version = "2.0.0.dev0"
+source = { editable = "apps/simulator" }
+dependencies = [
+    { name = "pyyaml" },
+    { name = "watchtower-contracts" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "watchtower-contracts", editable = "packages/contracts" },
 ]
 
 [[package]]

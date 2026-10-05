@@ -1,0 +1,14 @@
+# Normal operation, but 30% of deliveries are retransmitted up to 3 times (MQTT QoS 1
+# at-least-once). Correct behaviour: zero duplicate alerts, zero double-counted exposure.
+name: duplicate_storm
+seed: 701
+start: 2026-10-05T08:00:00Z
+duration: 1h
+sample_interval: 30s
+delivery:
+  duplicate_probability: 0.3
+  max_copies: 3
+fleet:
+  - {vehicle_id: TRK-701, route: RT-LAG-ABJ, start_km: 100, cargo_profile: frozen, pallets: 20}
+  - {vehicle_id: TRK-702, route: RT-PHC-MKD, start_km: 100, cargo_profile: pharma_2_8, pallets: 6}
+  - {vehicle_id: TRK-703, route: RT-BEN-ABJ, start_km: 100, cargo_profile: frozen, pallets: 14}

@@ -29,6 +29,11 @@ make up        # start the local stack (Docker), then: make migrate
 | `infra/compose/` | Local stack: Redpanda, Schema Registry, Console, PostGIS, SeaweedFS, gateway on 127.0.0.1:18090 (`make up`) |
 | `migrations/` | Alembic migrations for the Postgres schema (`make migrate`) |
 | `tests/integration/` | Container-backed tests (`make test-integration`, needs Docker) |
+| `packages/contracts/` | Avro event contracts and deterministic event identity |
+| `apps/simulator/` | Simulator v2 (`wt-sim`): real road routes, two-node reefer thermal model, dead zones, edge buffering |
+| `apps/dashboard-fixtures/` | Recorded simulator runs for console development (schema in its README) |
+| `data/routes/` | Corridor geometry from OpenStreetMap via OSRM (ODbL) |
+| `data/scenarios/` | Seeded scenarios and their ground-truth labels |
 | `tests/` | Test suite |
 | `docs/adr/` | Architecture decision records |
 | `docs/audit/` | v1 audit and baseline |

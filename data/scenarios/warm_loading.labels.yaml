@@ -1,0 +1,5 @@
+scenario: warm_loading
+expect:
+  - {vehicle: TRK-801, kind: cargo_excursion, present: true}   # from loading onwards
+  - {vehicle: TRK-802, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-801, kind: door_open_moving, present: false}

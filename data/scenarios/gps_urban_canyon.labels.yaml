@@ -1,0 +1,5 @@
+scenario: gps_urban_canyon
+expect:
+  - {vehicle: TRK-A31, kind: fault_gps_multipath, present: true}
+  - {vehicle: TRK-A31, kind: fault_gps_jump, present: true}
+  - {vehicle: TRK-A31, kind: cargo_excursion, present: false}

@@ -1,0 +1,5 @@
+scenario: clock_skew_and_reboot
+expect:
+  - {vehicle: TRK-A21, kind: fault_clock_skew, present: true}
+  - {vehicle: TRK-A21, kind: cargo_excursion, present: false}
+expect_boot_ids: 2   # one reboot; sequence numbers restart, which is not loss

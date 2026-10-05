@@ -1,0 +1,8 @@
+scenario: lagos_last_mile_morning_rush
+expect:
+  - {vehicle: VAN-LAG2, kind: door_open_moving, present: false}
+  - {vehicle: VAN-LAG1, kind: cargo_excursion, shipment: SHP-LAG-102, present: false}   # insulated vaccines
+stops:
+  - {stop: LAG-U2-01, on_time: true}
+  - {stop: LAG-U1-03, on_time: false}   # Island market: late off Third Mainland Bridge
+  - {stop: LAG-U1-02, in_spec: {SHP-LAG-102: true}}

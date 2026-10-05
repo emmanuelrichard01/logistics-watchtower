@@ -1,0 +1,8 @@
+scenario: breakdown_and_blowout
+expect:
+  - {vehicle: TRK-B11, kind: stop_breakdown, present: true}
+  - {vehicle: TRK-B11, kind: reefer_power_lost, present: true, starts_within: stop_breakdown}
+  - {vehicle: TRK-B11, kind: cargo_excursion, present: true, starts_within: reefer_power_lost}
+  - {vehicle: TRK-B12, kind: tyre_blowout, present: true}
+  - {vehicle: TRK-B12, kind: route_deviation, present: false}
+  - {vehicle: TRK-B12, kind: cargo_excursion, present: false}

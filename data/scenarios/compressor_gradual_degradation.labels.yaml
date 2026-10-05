@@ -1,0 +1,9 @@
+# Ground truth for evaluation and tests only, never read by the pipeline.
+# Kinds match the simulator's truth intervals; offsets are from scenario start.
+scenario: compressor_gradual_degradation
+expect:
+  - {vehicle: TRK-101, kind: compressor_degraded, present: true}
+  - {vehicle: TRK-101, kind: cargo_excursion, present: true, starts_after: 2h}
+  - {vehicle: TRK-102, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-103, kind: cargo_excursion, present: false}
+  - {vehicle: TRK-104, kind: cargo_excursion, present: false}

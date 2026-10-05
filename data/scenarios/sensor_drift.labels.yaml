@@ -1,0 +1,4 @@
+scenario: sensor_drift
+expect:
+  - {vehicle: TRK-A11, kind: fault_drift_cargo_probe, present: true, starts_after: 1h}
+  - {vehicle: TRK-A11, kind: cargo_excursion, present: false}   # the probe crosses -15 °C; the cargo never does

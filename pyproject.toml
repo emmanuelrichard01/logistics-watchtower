@@ -27,7 +27,7 @@ package = false
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
-# Node apps and fixture data live under apps/ too but are not Python packages.
+# Non-Python apps and data directories under apps/
 exclude = ["apps/dashboard", "apps/dashboard-fixtures"]
 
 [tool.ruff]
@@ -36,13 +36,17 @@ target-version = "py312"
 extend-exclude = [".claude", "legacy"]
 
 [tool.ruff.lint]
-# Migration DDL is SQL text, laid out for reading as SQL.
-per-file-ignores = { "migrations/versions/*.py" = ["E501"] }
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "PT", "N"]
+
+[tool.ruff.lint.per-file-ignores]
+# Migration DDL is SQL text, laid out for reading as SQL.
+"migrations/versions/*.py" = ["E501"]
+# A data table: one stop per line reads better than wrapped tuples.
+"apps/simulator/src/watchtower_simulator/build_urban.py" = ["E501"]
 
 [tool.pyright]
 pythonVersion = "3.12"
-include = ["apps/gateway", "packages", "tests"]
+include = ["apps", "packages", "tests"]
 exclude = ["legacy", "**/.venv", "**/__pycache__"]
 typeCheckingMode = "standard"
 strict = ["packages/contracts", "packages/domain"]
