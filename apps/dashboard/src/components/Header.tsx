@@ -3,6 +3,7 @@ import { Moon, Search, Sun } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useAppStore } from '../state/context'
 import { useStore } from '../state/store'
+import { Guide } from './Guide'
 import { NAV } from './nav'
 
 
@@ -90,6 +91,7 @@ export function Header() {
           <span>Search</span>
           <kbd>⌘K</kbd>
         </button>
+        <Guide />
         <ThemeToggle />
         <LivePill />
       </div>

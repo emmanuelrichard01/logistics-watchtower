@@ -383,6 +383,20 @@ export function MapView() {
         </button>
       </div>
       {selected && <TripCard onFollow={() => store.setFollow(!follow)} />}
+      <ul className="map-legend" aria-label="Map legend">
+        <li>
+          <i className="map-legend__arrow" aria-hidden="true" /> On schedule
+        </li>
+        <li>
+          <i className="map-legend__arrow map-legend__arrow--caution" aria-hidden="true" /> Breach forecast
+        </li>
+        <li>
+          <i className="map-legend__arrow map-legend__arrow--danger" aria-hidden="true" /> Breaching
+        </li>
+        <li>
+          <i className="map-legend__dash" aria-hidden="true" /> No signal
+        </li>
+      </ul>
     </div>
   )
 }

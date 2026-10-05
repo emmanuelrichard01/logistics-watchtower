@@ -9,6 +9,7 @@ mkdirSync(out, { recursive: true })
 
 const shots = [
   { name: 'desktop', path: '/', vp: { width: 1440, height: 900 }, theme: 'light' },
+  { name: 'desktop-guide', path: '/', vp: { width: 1440, height: 900 }, theme: 'light', guide: true },
   { name: 'desktop-dark', path: '/', vp: { width: 1440, height: 900 }, theme: 'dark' },
   { name: 'desktop-layer', path: '/', vp: { width: 1440, height: 900 }, theme: 'light', click: '.tag--danger, .tag--caution1, .tag--caution2' },
   { name: 'desktop-map', path: '/map', vp: { width: 1440, height: 900 }, theme: 'light', wait: 4500, click: '.fleet-row' },
@@ -23,7 +24,10 @@ const shots = [
 const browser = await chromium.launch()
 for (const s of shots) {
   const context = await browser.newContext({ viewport: s.vp, deviceScaleFactor: 1, isMobile: !!s.mobile, hasTouch: !!s.mobile, reducedMotion: 'reduce' })
-  await context.addInitScript((theme) => localStorage.setItem('wt-theme', theme), s.theme)
+  await context.addInitScript(([theme, guide]) => {
+    localStorage.setItem('wt-theme', theme)
+    if (!guide) localStorage.setItem('wt-guide-seen', '1')
+  }, [s.theme, !!s.guide])
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))

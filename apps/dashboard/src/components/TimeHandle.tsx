@@ -40,7 +40,7 @@ export function TimeHandle() {
         <span className="time-handle__clock num">{fmtTime(playhead)} WAT</span>
       </div>
 
-      <div className="time-handle__track" ref={trackRef}>
+      <div className="time-handle__track" ref={trackRef} data-hint={mode === 'live' ? 'Drag to replay' : 'Drag to scrub · L for live'}>
         <div className="time-handle__known" style={{ width: `${pct(liveEdge)}%` }} />
         <div className="time-handle__played" style={{ width: `${pct(playhead)}%` }} />
         {timeline.markers

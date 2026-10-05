@@ -11,10 +11,17 @@ export function StatusLine() {
   const playhead = useStore(store, (s) => s.playhead)
   const attention = view.shipments.filter((s) => s.risk.aspect !== 'clear').length
   const onSchedule = view.shipments.length - attention
+  const worst = view.shipmentsByRisk[0]
   return (
     <div className="status-line">
       <h1>
-        {attention === 0 ? 'Every shipment on schedule' : `${attention} shipment${attention === 1 ? ' needs' : 's need'} attention`}
+        {attention === 0 ? (
+          'Every shipment on schedule'
+        ) : (
+          <button type="button" className="status-line__action" onClick={() => worst && store.select(worst.vehicleId)} title={worst ? `Open ${worst.vehicleId}, the most urgent` : undefined}>
+            {`${attention} shipment${attention === 1 ? ' needs' : 's need'} attention`}
+          </button>
+        )}
         {attention > 0 && <span className="status-line__quiet"> · {onSchedule} on schedule</span>}
       </h1>
       <p className="status-line__meta num">Updated {fmtTime(playhead)} WAT</p>
