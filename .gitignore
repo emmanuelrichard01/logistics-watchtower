@@ -44,3 +44,13 @@ Desktop.ini
 
 # Project Specific (Data Volumes)
 redpanda_data/
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+
+# Generated, rebuild with `/graphify .` or `graphify update .`
+graphify-out/
+
+# Quix Streams local state (legacy v1)
+state/

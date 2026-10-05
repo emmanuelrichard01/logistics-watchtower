@@ -1,0 +1,7 @@
+# Scripts, Makefiles and Dockerfiles run in Linux containers and CI: keep LF everywhere.
+* text=auto eol=lf
+
+*.gif binary
+*.png binary
+*.webp binary
+*.parquet binary
