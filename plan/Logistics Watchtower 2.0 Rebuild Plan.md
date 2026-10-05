@@ -79,6 +79,8 @@ The old system answered "is this truck over the threshold right now?" The rebuil
 
 Telemetry and alert events live on Redpanda, and the archive and alert tables are rebuilt from it by replay. Operator actions are recorded in Postgres first and published through the outbox relay, so no write ever needs to be atomic across a database and a broker.
 
+> **Architecture v2.1 (5 Oct 2026).** An adversarial review (`docs/architecture/review-2026-10-05.md`) changed the target architecture. The changes: one ordered input log (ADR-0005); the processor as the single alert-lifecycle owner (ADR-0006); a determinism contract (ADR-0015); a processor state layout (ADR-0016); vehicle-keyed topics and a pinned partitioner (ADR-0017); a push protocol (ADR-0018); session auth (ADR-0008); and SeaweedFS instead of the archived MinIO (ADR-0013). Where this plan's text disagrees with those ADRs, the ADRs win.
+
 ## 5. Technology decisions
 
 Keep Redpanda and Python, add the pieces that answer a named requirement, and keep the processing logic independent of the stream engine so the engine can change later. Each row below becomes an ADR in section 22.
