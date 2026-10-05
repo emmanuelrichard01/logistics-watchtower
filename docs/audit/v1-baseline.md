@@ -1,6 +1,6 @@
 # v1 Audit and Baseline
 
-Audit of `main` at `abc2a08` (the code that becomes `v1-final`), 5 Oct 2026. Rebuild plan, section 19, day 2.
+Audit of `main` at `abc2a08` (tagged `v1-final`; on the `v2` branch the code lives in `legacy/v1/`), 5 Oct 2026. Rebuild plan, section 19, day 2.
 
 Simulation figures come from running the real `producer.py` and `processor.py` offline on a virtual clock (Kafka stubbed, 0.5 s ticks, fixed seeds). Runtime figures (throughput, produce-to-WebSocket latency, CPU and memory) are **not measured yet** and need the Compose stack. See the last section.
 
