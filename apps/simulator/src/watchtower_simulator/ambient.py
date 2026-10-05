@@ -42,3 +42,14 @@ def ambient_c(t_ms: int, lat: float) -> float:
     base += BASE_PER_DEG_NORTH * north
     amplitude += AMPLITUDE_PER_DEG_NORTH * north
     return base + amplitude * math.cos(2 * math.pi * (hour - PEAK_HOUR_LOCAL) / 24)
+
+
+# Mean outside relative humidity by month, illustrative: Harmattan is dry, the rains humid.
+MONTHLY_RH = {1: 40, 2: 45, 3: 60, 4: 70, 5: 75, 6: 82, 7: 85, 8: 85, 9: 83, 10: 78, 11: 60, 12: 45}
+RH_PER_DEG_NORTH = -3.0  # drier inland, illustrative
+
+
+def ambient_rh_pct(t_ms: int, lat: float) -> float:
+    month = to_datetime(t_ms).month
+    rh = MONTHLY_RH[month] + RH_PER_DEG_NORTH * max(0.0, lat - COAST_LAT)
+    return min(98.0, max(15.0, rh))

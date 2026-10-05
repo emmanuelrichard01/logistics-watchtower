@@ -33,22 +33,27 @@ class DeliveryPolicy:
 @dataclass
 class Device:
     device_id: str
-    boot_date: str  # YYYYMMDD, part of every boot_id
-    rng: random.Random
+    rng: random.Random  # delivery latency and duplicates
+    boot_rng: random.Random  # boot identities
     policy: DeliveryPolicy
-    boot_count: int = 1
+    boot_id: str = ""
     seq: int = 0
     buffer: deque[tuple[Reading, bool]] = field(
         default_factory=lambda: deque[tuple[Reading, bool]]()
     )
     dropped: int = 0
 
-    @property
-    def boot_id(self) -> str:
-        return f"b-{self.boot_date}-{self.boot_count:04d}"
+    def __post_init__(self) -> None:
+        if not self.boot_id:
+            self.boot_id = self._new_boot_id()
+
+    def _new_boot_id(self) -> str:
+        # Random rather than time-shaped: time-shaped IDs can collide across devices, and
+        # deduplication downstream is keyed by (device_id, boot_id).
+        return f"b-{self.boot_rng.getrandbits(64):016x}"
 
     def reboot(self) -> None:
-        self.boot_count += 1
+        self.boot_id = self._new_boot_id()
         self.seq = 0
 
     def stamp(self, reading: Reading, event_ms: int) -> Reading:

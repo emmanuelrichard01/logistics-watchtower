@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import pytest
@@ -11,7 +12,7 @@ def reading() -> dict[str, Any]:
 
 
 def device(**policy: Any) -> Device:
-    return Device("EDGE-0001", "20261005", rng(1, "test"), DeliveryPolicy(**policy))
+    return Device("EDGE-0001", rng(1, "test"), rng(1, "boot"), DeliveryPolicy(**policy))
 
 
 def test_per_step_probability_matches_per_minute_over_a_minute() -> None:
@@ -36,6 +37,7 @@ def test_sequence_numbers_restart_on_reboot_with_a_new_boot_id() -> None:
     assert [r["seq"] for r in first] == [1, 2, 3]
     assert after["seq"] == 1
     assert after["boot_id"] != boot
+    assert re.fullmatch(r"b-[0-9a-f]{16}", boot)
     assert len({r["event_id"] for r in [*first, after]}) == 4
 
 

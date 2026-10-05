@@ -38,6 +38,8 @@ class VehicleSpec:
     initial_air_c: float | None = None
     initial_cargo_c: float | None = None
     stopped: bool = False  # parked at start (e.g. loading at a depot)
+    sample_interval_ms: int | None = None  # overrides the scenario's reporting intervals
+    burst_interval_ms: int | None = None
     extra: dict[str, Any] = field(default_factory=lambda: {})
 
 
@@ -55,12 +57,13 @@ class Scenario:
     seed: int
     start_ms: int
     duration_ms: int
-    sample_interval_ms: int
+    sample_interval_ms: int  # base reporting interval
     fleet: tuple[VehicleSpec, ...]
     events: tuple[Event, ...]
     duplicate_probability: float = 0.0
     max_copies: int = 3
     named_dead_zones: bool = True
+    burst_interval_ms: int = 10_000  # reporting interval while an alarm condition holds
     raw: dict[str, Any] = field(default_factory=lambda: {}, compare=False)
 
     def with_duration(self, duration: int) -> "Scenario":
@@ -85,6 +88,10 @@ def parse(doc: dict[str, Any]) -> Scenario:
             initial_air_c=v.get("initial_air_c"),
             initial_cargo_c=v.get("initial_cargo_c"),
             stopped=bool(v.get("stopped", False)),
+            sample_interval_ms=duration_ms(v["sample_interval"])
+            if "sample_interval" in v
+            else None,
+            burst_interval_ms=duration_ms(v["burst_interval"]) if "burst_interval" in v else None,
             extra={k: x for k, x in v.items() if k not in VehicleSpec.__dataclass_fields__},
         )
         for v in doc["fleet"]
@@ -115,6 +122,7 @@ def parse(doc: dict[str, Any]) -> Scenario:
         duplicate_probability=float(delivery.get("duplicate_probability", 0.0)),
         max_copies=int(delivery.get("max_copies", 3)),
         named_dead_zones=bool(doc.get("named_dead_zones", True)),
+        burst_interval_ms=duration_ms(doc.get("burst_interval", "10s")),
         raw=doc,
     )
 

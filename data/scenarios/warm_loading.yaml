@@ -1,0 +1,15 @@
+# TRK-801 is loaded with fresh produce still carrying field heat (14 °C against a 4 °C
+# setpoint, 1-8 °C allowed): the most common real-world cause of excursions. A reefer is built
+# to hold temperature, not pull down a warm load, so the cargo stays out of range for hours
+# while return air looks almost normal. TRK-802 was loaded correctly, for comparison.
+# Correct behaviour: flag the excursion from the cargo probe even though air temps look fine.
+name: warm_loading
+seed: 801
+start: 2026-04-08T05:00:00Z   # 06:00 WAT
+duration: 10h
+fleet:
+  - {vehicle_id: TRK-801, route: RT-PHC-MKD, start_km: 0.5, cargo_profile: fresh_produce, pallets: 18, initial_cargo_c: 14.0, initial_air_c: 14.0}
+  - {vehicle_id: TRK-802, route: RT-PHC-MKD, start_km: 0.8, cargo_profile: fresh_produce, pallets: 18}
+events:
+  - {at: 0s, vehicle: TRK-801, type: stop, stop_type: depot_loading, duration: 30m}
+  - {at: 0s, vehicle: TRK-802, type: stop, stop_type: depot_loading, duration: 30m}

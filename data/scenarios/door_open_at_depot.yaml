@@ -9,5 +9,5 @@ sample_interval: 30s
 fleet:
   - {vehicle_id: TRK-401, route: RT-LAG-ABJ, start_km: 0.2, cargo_profile: pharma_2_8, pallets: 8}
 events:
-  - {at: 0s, vehicle: TRK-401, type: stop, duration: 40m}
+  - {at: 0s, vehicle: TRK-401, type: stop, stop_type: depot_loading, duration: 40m, door_open: 0s}
   - {at: 10m, vehicle: TRK-401, type: door_open, duration: 20m}

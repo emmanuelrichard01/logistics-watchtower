@@ -1,7 +1,7 @@
 """Two-node reefer thermal model (plan section 8).
 
     C_a dT_a/dt = (T_amb - T_a)/R_w + (T_c - T_a)/R_c + Q_door + Q_defrost - h Q_max u(t)
-    C_c dT_c/dt = (T_a - T_c)/R_c
+    C_c dT_c/dt = (T_a - T_c)/R_c + Q_resp
 
 Conductances are used instead of resistances (UA = 1/R). ``h`` in [0, 1] is compressor health,
 so a failing unit loses capacity gradually; ``u`` is the thermostat duty with hysteresis on
@@ -52,8 +52,9 @@ class Inputs:
     health: float = 1.0
     door_open: bool = False
     defrost: bool = False
-    extra_heat_kw: float = 0.0  # solar and other loads from the environment layer
+    extra_heat_kw: float = 0.0  # into box air: solar load and other environment terms
     capacity_factor: float = 1.0  # evaporator icing etc. from the reefer layer
+    cargo_heat_kw: float = 0.0  # generated inside the cargo: produce respiration
 
 
 def thermostat(state: ThermalState, p: ThermalParams, i: Inputs) -> bool:
@@ -88,6 +89,6 @@ def step(state: ThermalState, p: ThermalParams, load: Load, i: Inputs, dt_s: flo
         q_defrost = p.defrost_kw if i.defrost else 0.0
         q_net = q_wall + q_cargo + q_door + q_defrost + i.extra_heat_kw - cooling_kw(state, p, i)
         air = state.air_c + dt * q_net / p.air_capacity_kj_per_k
-        cargo = state.cargo_c - dt * q_cargo / load.capacity_kj_per_k
+        cargo = state.cargo_c + dt * (i.cargo_heat_kw - q_cargo) / load.capacity_kj_per_k
         state = replace(state, air_c=air, cargo_c=cargo)
     return state
