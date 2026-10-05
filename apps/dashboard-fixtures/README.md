@@ -51,6 +51,9 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `air_c` | number | Return-air temperature (box air) |
 | `supply_air_c` | number | Air leaving the evaporator |
 | `ambient_c` | number | Outside air temperature |
+| `sun_elevation_deg`, `irradiance_w_m2`, `cloud_cover` | number | Sun height, global horizontal irradiance, cloud fraction 0-1 |
+| `storm` | boolean | A rainy-season storm over this truck (cooler air, slower traffic, a flakier link) |
+| `solar_heat_kw` | number | Extra heat the sun is driving into the box (higher when parked, sun on a long side) |
 | `humidity_pct` | number | Box relative humidity (jumps towards outside RH while the door is open) |
 | `door` | string | `OPEN` or `CLOSED` |
 | `compressor` | string | `RUNNING`, `OFF` or `FAULT` |

@@ -20,11 +20,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from watchtower_simulator.ambient import ambient_c, ambient_rh_pct
+from watchtower_simulator.ambient import ambient_rh_pct
 from watchtower_simulator.cargo import PROFILES, CargoProfile
 from watchtower_simulator.channel import Channel
 from watchtower_simulator.clock import iso, rng, to_datetime, to_ms
 from watchtower_simulator.device import Delivery, DeliveryPolicy, Device, Reading
+from watchtower_simulator.environment import Conditions, Weather, conditions
 from watchtower_simulator.reefer import Reefer, ReeferParams
 from watchtower_simulator.routes import Route, load_routes
 from watchtower_simulator.scenario import Event, Scenario, VehicleSpec, duration_ms
@@ -82,6 +83,7 @@ class VehicleSim:
     sensor: random.Random
     ops: random.Random
     thermal: ThermalState
+    weather: Weather
     km: float
     base_interval_ms: int
     burst_interval_ms: int
@@ -99,6 +101,7 @@ class VehicleSim:
     signal_dbm: int | None = None
     last_sample_ms: int | None = None
     last_event_ms: int | None = None  # freshest reading the gateway has received
+    cond: Conditions | None = None  # this tick's environment
     open_truth: dict[str, int] = field(default_factory=lambda: {})
 
     def moving(self) -> bool:
@@ -195,6 +198,7 @@ class Simulation:
             sensor=rng(s.seed, spec.vehicle_id, "sensor"),
             ops=rng(s.seed, spec.vehicle_id, "ops"),
             thermal=ThermalState(air_c=air, cargo_c=cargo),
+            weather=Weather(rng(s.seed, spec.vehicle_id, "weather")),
             km=spec.start_km,
             base_interval_ms=spec.sample_interval_ms or s.sample_interval_ms,
             burst_interval_ms=spec.burst_interval_ms or s.burst_interval_ms,
@@ -293,9 +297,18 @@ class Simulation:
     def power_available(self, v: VehicleSim) -> bool:
         return not (v.reefer.power_source == "GENSET" and v.reefer.genset_l <= 0.0)
 
-    def inputs(self, v: VehicleSim, now: int, lat: float) -> Inputs:
+    def environment(self, v: VehicleSim, now: int) -> Conditions:
+        lat, lon, heading = v.route.position(v.km)
+        v.cond = conditions(
+            v.weather, now, lat, lon, heading, v.speed_kmh, v.params.wall_ua_kw_per_k
+        )
+        return v.cond
+
+    def inputs(self, v: VehicleSim, now: int) -> Inputs:
+        c = v.cond or self.environment(v, now)
         return Inputs(
-            ambient_c=ambient_c(now, lat),
+            ambient_c=c.ambient_c,
+            extra_heat_kw=c.solar_heat_kw,
             setpoint_c=v.profile.setpoint_c,
             health=v.health,
             door_open=now < v.door_until_ms,
@@ -316,12 +329,14 @@ class Simulation:
         if v.health_ramp is not None:
             v.health = v.health_ramp.value(now)
         lat, lon, heading = v.route.position(v.km)
+        c = self.environment(v, now)
         segment = v.route.segment(v.km)
         zone = v.route.dead_zone(v.km) if self.scenario.named_dead_zones else None
         forced = zone is not None or now < v.outage_until_ms
-        v.link_up = v.channel.step(segment.p_drop, segment.p_recover, self.step_ms / 1000, forced)
+        p_drop = min(1.0, segment.p_drop * c.link_drop_factor)
+        v.link_up = v.channel.step(p_drop, segment.p_recover, self.step_ms / 1000, forced)
         v.signal_dbm = v.channel.signal_dbm(v.link_up)
-        i = self.inputs(v, now, lat)
+        i = self.inputs(v, now)
         excursion = not v.profile.in_range(v.thermal.cargo_c)
 
         interval = v.burst_interval_ms if self.alarm(v, i) else v.base_interval_ms
@@ -347,6 +362,7 @@ class Simulation:
                 "compressor_fault": v.fault_code is not None,
                 "compressor_degraded": v.health < 0.95,
                 "reefer_power_lost": not self.power_available(v),
+                "storm": c.storm,
             },
         )
         if record:
@@ -370,15 +386,18 @@ class Simulation:
         else:
             v.reefer.power_source = "GENSET"
 
-        i = self.inputs(v, now, lat)
+        i = self.inputs(v, now)
         v.thermal = step(v.thermal, v.params, v.load, i, dt_s)
+        v.weather.update(now, dt_s)
         v.reefer.update(
             now,
             dt_s,
             compressor_on=v.thermal.compressor_on and i.capacity_factor > 0.0,
             door_open=i.door_open,
             forced_defrost=now < v.forced_defrost_until_ms,
-            outside_rh_pct=ambient_rh_pct(now, lat),
+            outside_rh_pct=96.0
+            if v.cond is not None and v.cond.storm
+            else ambient_rh_pct(now, lat),
             box_rh_pct=v.profile.box_humidity_pct,
         )
 
@@ -387,7 +406,8 @@ class Simulation:
             v.target_kmh = 0.0
         elif now % 60_000 == 0 or v.target_kmh == 0.0:
             low, high = SPEED_BANDS[v.route.segment(v.km).road_class]
-            v.target_kmh = v.motion.uniform(low, high)
+            factor = v.cond.speed_factor if v.cond else 1.0
+            v.target_kmh = v.motion.uniform(low, high) * factor
         tau_s = 8.0 if stopped else 30.0
         v.speed_kmh += (v.target_kmh - v.speed_kmh) * min(1.0, dt_s / tau_s)
         if v.speed_kmh < 0.5 and stopped:
@@ -461,6 +481,11 @@ class Simulation:
             "air_c": round(t.return_air_c, 2),
             "supply_air_c": round(supply_air_c(t, v.params, i), 2),
             "ambient_c": round(i.ambient_c, 1),
+            "sun_elevation_deg": round(v.cond.sun.elevation_deg, 1) if v.cond else None,
+            "irradiance_w_m2": round(v.cond.ghi_w_m2) if v.cond else None,
+            "cloud_cover": round(v.cond.cloud, 2) if v.cond else None,
+            "storm": bool(v.cond and v.cond.storm),
+            "solar_heat_kw": round(i.extra_heat_kw, 3),
             "humidity_pct": round(r.humidity_pct, 1),
             "door": "OPEN" if i.door_open else "CLOSED",
             "compressor": self.compressor_state(v, i),
