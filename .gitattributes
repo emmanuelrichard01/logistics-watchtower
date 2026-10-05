@@ -5,3 +5,6 @@
 *.png binary
 *.webp binary
 *.parquet binary
+
+# Recorded fixtures are generated; diffs are noise
+apps/dashboard-fixtures/*.jsonl -diff linguist-generated

@@ -8,7 +8,7 @@ from watchtower_simulator.clock import to_ms
 from watchtower_simulator.environment import local_hour
 from watchtower_simulator.geo import haversine_km
 from watchtower_simulator.routes import default_data_dir, load_routes
-from watchtower_simulator.testing import rows, run
+from watchtower_simulator.testing import read_jsonl, rows, run
 
 ROUTES = load_routes()
 CONSOLE = json.loads(
@@ -96,7 +96,7 @@ def test_breakdown_stop_lasts_its_scheduled_duration() -> None:
 
 def test_fixture_rows_off_route_are_flagged() -> None:
     for path in Path(default_data_dir().parent / "apps" / "dashboard-fixtures").glob(
-        "*.fleet.jsonl"
+        "*.fleet.jsonl.gz"
     ):
-        for line in path.read_text(encoding="utf-8").splitlines()[:5]:
-            assert "off_route_km" in json.loads(line)
+        for row in read_jsonl(path)[:5]:
+            assert "off_route_km" in row

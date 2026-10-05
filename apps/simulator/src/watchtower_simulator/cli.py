@@ -5,6 +5,8 @@
 """
 
 import argparse
+import gzip
+import io
 import json
 import sys
 from pathlib import Path
@@ -16,12 +18,17 @@ from watchtower_simulator.scenario import duration_ms
 
 
 def write_jsonl(path: Path, rows: Any) -> int:
+    """JSON lines; gzip-compressed when the path ends in .gz (with a zero timestamp, so the
+    same run still produces byte-identical files)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with path.open("w", encoding="utf-8", newline="\n") as f:
-        for row in rows:
-            f.write(json.dumps(row, separators=(",", ":"), ensure_ascii=False) + "\n")
-            count += 1
+    with path.open("wb") as raw:
+        gz = path.suffix == ".gz"
+        sink: Any = gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) if gz else raw
+        with io.TextIOWrapper(sink, encoding="utf-8", newline="\n") as f:
+            for row in rows:
+                f.write(json.dumps(row, separators=(",", ":"), ensure_ascii=False) + "\n")
+                count += 1
     return count
 
 
