@@ -18,5 +18,6 @@ Where an ADR and the plan text disagree, the ADR wins.
 | [0016](0016-processor-state-layout.md) | Processor state as one key per (vehicle, minute) bucket; deltas; deterministic eviction | Accepted |
 | [0017](0017-keys-and-partitioning.md) | `vehicle_id` keys every topic; murmur2 partitioner pinned in one producer factory | Accepted |
 | [0018](0018-realtime-push-protocol.md) | WebSocket frames carry `(epoch, seq)` for gap detection; binary columnar tile frames | Accepted |
+| [0021](0021-gateway-contract-and-quarantine.md) | Stateless gateway: ordered validation with reason codes, per-device HMAC signatures, 202 only after broker acknowledgement | Accepted |
 
 Most of 0005-0018 came out of the adversarial [architecture review of 5 Oct 2026](../architecture/review-2026-10-05.md).

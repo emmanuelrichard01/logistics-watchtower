@@ -9,15 +9,18 @@ Status is as of the commit that last edited this file.
 
 | Area | Status | Where |
 | --- | --- | --- |
-| Event contract (Avro), event identity | Built | `packages/contracts`, ADR-0002 |
+| Event contracts (Avro: `telemetry_event`, `input_record`), event identity | Built | `packages/contracts`, ADR-0002, ADR-0005 |
 | Domain: sequence-range dedup, minute buckets, delta-returning `evaluate` | Built | `packages/domain`, ADR-0016 |
-| Domain: time-to-breach forecast (p10-p90), mean kinetic temperature, exposure | Built as pure functions, not yet wired into a processor | `packages/domain/src/watchtower_domain/forecast.py` |
+| Domain: time-to-breach forecast (p10-p90), mean kinetic temperature, exposure | Built as pure functions | `packages/domain/src/watchtower_domain/forecast.py` |
+| Domain: sensor trust and cargo fusion; risk assessment; alert state machine | Built as pure functions | `trust.py`, `risk.py`, `alerts.py` (ADR-0006) |
+| Processor core: the vehicle evaluator, `handle(head, buckets, record, rules)` | Built as a pure function; no stream shell runs it yet | `vehicle.py` |
+| Ingest gateway | Built: stateless validation, HMAC signatures, quarantine reason codes, broker-acknowledged 202/503 | `apps/gateway`, ADR-0021 |
 | Producer factory with pinned partitioner | Built | `packages/platform`, ADR-0017 |
 | Core infrastructure: Redpanda, Schema Registry, Postgres/PostGIS, SeaweedFS, topic init | Built | `infra/compose` |
 | Database schema | Built | `migrations/versions/0001_core_schema.py` |
 | Operator console | Built, on synthetic data | `apps/dashboard`, [console docs](../console/README.md) |
 | Simulator v2 | In progress | `apps/simulator` |
-| Gateway, ticker, processor, projector, outbox relay, archiver, API, notifier | Designed | ADRs 0005, 0006, 0008, 0018 |
+| Ticker, processor stream shell, projector, outbox relay, archiver, API, notifier | Designed | ADRs 0005, 0006, 0008, 0018 |
 | Analytics (dbt Silver/Gold), observability stack | Designed | Plan sections 11 and 14 |
 
 ## System context
@@ -93,11 +96,11 @@ flowchart TB
 
   classDef built fill:#eef2ff,stroke:#1f4bff,color:#0e1116
   classDef designed fill:#f8f9fb,stroke:#8a93a0,color:#0e1116,stroke-dasharray:4 3
-  class ui,input,outs,quar,pg,s3 built
-  class sim,gw,tick,proc,work,api designed
+  class ui,gw,input,outs,quar,pg,s3 built
+  class sim,tick,proc,work,api designed
 ```
 
-Solid blue boxes are built; dashed grey boxes are designed. The topics and schema exist and are tested, but no service produces to them yet.
+Solid blue boxes are built; dashed grey boxes are designed. The gateway produces to `wt.input.v1` and the quarantine topic. The processor's logic exists as a pure function (`watchtower_domain.vehicle`), but the stream shell that runs it isn't built, so nothing consumes the input log yet.
 
 ## Event flow: one ordered input log
 

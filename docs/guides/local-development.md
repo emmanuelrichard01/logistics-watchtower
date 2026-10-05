@@ -15,7 +15,7 @@
 ```bash
 make install         # uv sync of the whole workspace, plus pre-commit hooks
 make check           # lint, pyright, fast tests: exactly what CI runs
-make up              # Redpanda, Schema Registry, Console, Postgres/PostGIS, SeaweedFS; waits until healthy
+make up              # Redpanda, Schema Registry, Console, Postgres/PostGIS, SeaweedFS, gateway; waits until healthy
 make migrate         # apply the Alembic schema to the stack's Postgres
 make console         # build the console and serve it at http://localhost:4173
 ```
@@ -35,6 +35,7 @@ All host ports bind to `127.0.0.1` and use a `1xxxx` prefix, so they don't colli
 | Redpanda Console | 18080 | http://localhost:18080 |
 | Postgres / PostGIS | 15432 | User and database `watchtower`; dev password `watchtower`, overridable with `POSTGRES_PASSWORD` |
 | SeaweedFS S3 | 18333 | Dev-only credentials, never used outside the local stack |
+| Ingest gateway | 18090 | `POST` batches of signed readings (ADR-0021) |
 | Console, production preview | 4173 | `make console` |
 | Console, dev server | 5173 | `make console-dev` |
 

@@ -4,9 +4,10 @@ Tests are the evidence for every claim the project makes (ADR-0001, honest-claim
 
 | Layer | Count | What it proves | Run |
 | --- | --- | --- | --- |
-| Unit and property (Python) | 48 | Domain logic is idempotent, order-independent and pure; event identity is stable and unambiguous; the producer factory pins its delivery settings | `make test` |
-| Contract | 4 | Every released schema version has a golden payload; the newest schema reads every older version (BACKWARD); golden IDs match the identity function | `make test` |
-| Integration | 9 | The migration applies and downgrades cleanly; database invariants hold; an Avro event round-trips through the real Schema Registry, which rejects incompatible changes | `make test-integration` (needs Docker) |
+| Unit and property: domain and platform | 82 | Domain logic is idempotent, order-independent and pure; trust, forecast, risk and the alert state machine behave as specified; event identity is stable; the producer factory pins its delivery settings | `make test` |
+| Unit: gateway | 51 | Every validation reason code in order, signatures, settings, and the HTTP contract (202 only when every record is acknowledged, 503 otherwise) | `make test` |
+| Contract | 14 | For `telemetry_event` and `input_record`: every released version has a golden payload, the newest schema reads every older version (BACKWARD), and golden IDs match the identity function | `make test` |
+| Integration | 10 | The migration applies and downgrades cleanly; database invariants hold; an Avro event round-trips through the real Schema Registry, which rejects incompatible changes | `make test-integration` (needs Docker) |
 | Console | 7 | The synthetic timeline is deterministic, and each scripted scenario raises exactly the incidents it should | `npm --prefix apps/dashboard test` |
 
 `make check` runs lint, pyright (strict on `packages/domain` and `packages/contracts`) and the fast suite. CI runs the same, plus a full-history secret scan, the integration suite and the console checks (`.github/workflows/ci.yml`).
@@ -48,7 +49,8 @@ Minute buckets accumulate integer hundredths because float addition depends on o
 - the app role being unable to rewrite append-only tables;
 - `minute_series` routing rows to UTC-day partitions;
 - an Avro event registered in the Schema Registry, produced and consumed back equal;
-- the Schema Registry itself rejecting a BACKWARD-incompatible change.
+- the Schema Registry itself rejecting a BACKWARD-incompatible change;
+- a gateway batch travelling end to end through Redpanda and the Schema Registry.
 
 The audit hash chain's constraints exist in the schema, but no test covers them yet.
 

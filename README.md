@@ -43,11 +43,11 @@ The processor is the single owner of alert state ([ADR-0006](docs/adr/0006-alert
 
 | Phase (plan section 18) | What exists | Status |
 | --- | --- | --- |
-| 0. Foundation | v1 frozen and audited; uv workspace; quality gates; CI workflow (not yet run on GitHub); Avro contract and event identity; Compose core stack; database schema | Done, except the simulator and gateway |
-| 1. Reliable backbone | Device-scoped dedup, idempotent minute buckets, delta-returning `evaluate`, deterministic eviction (property-tested) | Started early; DLQ, engine spike, late data and sensor trust planned |
-| 2. Durable core | Schema with alerts, interventions, outbox and an append-only audit chain | Schema done; services planned |
+| 0. Foundation | v1 frozen and audited; uv workspace; quality gates; CI workflow (not yet run on GitHub); Avro contracts (telemetry, input record) and event identity; Compose core stack; database schema; stateless ingest gateway with signed readings and quarantine (ADR-0021) | Done, except the simulator |
+| 1. Reliable backbone | Device-scoped dedup, idempotent minute buckets, delta-returning `evaluate`, deterministic eviction; sensor trust and cargo fusion (all property-tested) | Started early; DLQ, engine spike and late-data lane planned |
+| 2. Durable core | Schema with alerts, interventions, outbox and an append-only audit chain; the alert state machine with a single owner, as a pure function (ADR-0006) | Schema and state machine done; projector, outbox relay and API planned |
 | 3. Data layer | Bronze bucket provisioned on SeaweedFS | Planned |
-| 4. Decisions | Time-to-breach (exponential fit with a p10-p90 range), mean kinetic temperature and exposure as pure, property-tested functions | Started early; wiring into the processor, ranking and alerts planned |
+| 4. Decisions | Time-to-breach (exponential fit with a p10-p90 range), mean kinetic temperature, exposure and risk assessment (aspect, confidence, expected loss), composed by a pure vehicle evaluator: the processor's core | Started early; the processor's stream shell and console wiring planned |
 | 5. Experience | Operator console: lanes, evidence layer, map (2D/3D), incidents, health, phone layouts, replay | In progress, on synthetic data |
 | 6. Evidence | v1 runtime baseline | Planned |
 
@@ -60,7 +60,7 @@ Requires [uv](https://docs.astral.sh/uv/), Docker Desktop, Node.js 24+ and GNU M
 ```bash
 make install    # Python workspace and git hooks
 make check      # lint, pyright, fast tests (same as CI)
-make up         # Redpanda, Schema Registry, Postgres/PostGIS, SeaweedFS
+make up         # Redpanda, Schema Registry, Postgres/PostGIS, SeaweedFS, gateway
 make migrate    # apply the database schema
 make console    # console production build at http://localhost:4173
 ```
@@ -78,6 +78,7 @@ Real decisions, with their trade-offs:
 - **An adversarial architecture review, kept on record.** A fresh-context review found 32 issues in the original plan: two writers to alert state, a non-replayable stream, random alert IDs, and an archived object store (MinIO, verified via the GitHub API). The fixes are recorded in ADRs 0005-0018 ([review](docs/architecture/review-2026-10-05.md)).
 - **Performance diagnosed, not guessed.** The console's map felt laggy. The measurement showed the dev server at 0.2-47.5 fps against **59.8-59.9 fps for the production build** on the reference laptop's GPU ([console docs](docs/console/README.md#performance)). Along the way, MapLibre's worker turned out to be missing from production builds, so the basemap never decoded tiles. Vite couldn't see the worker's computed URL; it's now bundled explicitly.
 - **A forecast that never pretends to be exact.** When cooling fails, cargo approaches ambient exponentially, so time-to-breach is a least-squares fit of that curve. Residual scatter widens it into a p10-p90 range, and a property test pins that the estimate never grows as cargo warms. Learned models come only after they beat this transparent baseline (`packages/domain/src/watchtower_domain/forecast.py`).
+- **Acknowledge only what the broker acknowledged.** The gateway answers 202 only after every record in a batch is acknowledged by Redpanda. Otherwise it returns 503 with `Retry-After`, and the device resends; deterministic `event_id`s make the repeats harmless. It stays stateless: sequence-reuse detection lives in the processor, because the plan's original "reject sequence regressions" rule would have quarantined every buffered replay ([ADR-0021](docs/adr/0021-gateway-contract-and-quarantine.md)).
 - **Domain purity enforced by a test.** The domain package may import only the standard library, minus I/O, clocks and randomness. That makes it deterministic and reusable by the processor, the edge agent and replay.
 
 ## Repository
@@ -85,10 +86,11 @@ Real decisions, with their trade-offs:
 | Path | Contents |
 | --- | --- |
 | `apps/dashboard` | Operator console (React, Vite, MapLibre, deck.gl) |
+| `apps/gateway` | Ingest gateway (FastAPI): validates and signature-checks readings, produces to `wt.input.v1` (ADR-0021) |
 | `apps/simulator` | Simulator v2 (in progress) |
 | `packages/contracts` | Avro schemas, event identity |
-| `packages/domain` | Pure domain logic: dedup, minute buckets |
-| `packages/platform` | Kafka producer factory |
+| `packages/domain` | Pure domain logic: dedup, buckets, sensor trust, forecast, risk, alert state machine, vehicle evaluator |
+| `packages/platform` | Kafka producer factory, Schema Registry client |
 | `infra/compose` | Core stack and topic creation |
 | `migrations` | Alembic schema |
 | `tests` | Unit, property, contract and integration tests |
@@ -109,7 +111,7 @@ Real decisions, with their trade-offs:
 ## Limitations
 
 - **No real fleet.** All data is synthetic. The console runs on a seeded timeline, and its time-to-breach comes from a provisional console-side estimator, not the risk engine.
-- **Services not built yet.** The gateway, processor, projector, API and archiver are designed and their topics and schema exist, but nothing produces to them yet.
+- **The stream is only half built.** The gateway is built and produces to `wt.input.v1`, and the processor's core exists as a pure, tested function. But the stream shell that runs that core, the projector, the API and the archiver are still designed, not built, so nothing consumes the input log yet.
 - **CI has not run remotely.** The workflow exists, and the same checks pass locally.
 - **One laptop, single node.** The performance numbers come from one Windows laptop with integrated graphics and a single-node broker. Nothing here is a production claim.
 - **Straight-line corridors.** The console's corridors join town coordinates with straight lines until the simulator's road geometry lands.
