@@ -2,6 +2,13 @@
 
 Surprises and measurements, newest first. Raw material for the case study.
 
+## Week 1, day 2 work and console direction (Mon 5 Oct 2026)
+
+- v1 runtime baseline measured, 3 to 2000 trucks (`docs/audit/v1-baseline.md`). Telemetry p99 was 107 ms and alert p99 147 ms at 2000 trucks. The v1 producer, not the pipeline, is the bottleneck: it sleeps *after* each tick, so at 2000 trucks it delivers only 62% of the intended rate.
+- **Surprise:** at 1000 trucks the first run delivered zero alerts. The API had subscribed before the `alerts` topic existed, and librdkafka only noticed the topic at the 5-minute metadata refresh (assigned at 297 s), skipping about 10,000 alerts. A start-order race in v1. v2 lesson: create topics explicitly before any consumer starts, and test cold-start ordering.
+- **Measurement lesson:** the latency client must run inside the Compose network. A Windows-host client would mix two clocks (host and Docker VM).
+- The programme is extended to 14 weeks to fund the operator console (ADR-0010). The console direction is "Signal Box": lanes as track diagrams and time-to-breach as signal aspects (`docs/design/console.md`).
+
 ## Week 1, day 3 work (done early, Mon 5 Oct 2026)
 
 - Avro contract `telemetry_event` v1 deviates from the plan's example payload in three ways. `gps_fix` uses `FIX_2D`/`FIX_3D`, because Avro enum symbols can't start with a digit. Every enum has an `UNKNOWN` default, so adding a symbol later doesn't break old readers. `schema_version` starts at 1, not 2.
