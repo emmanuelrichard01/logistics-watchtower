@@ -16,54 +16,57 @@ from pathlib import Path
 from typing import Any
 
 from watchtower_simulator.geo import LonLat, haversine_km, simplify
+from watchtower_simulator.routes import Route
 
 # Same corridors and stops as v1 (legacy/v1/src/producer.py), now routed on real roads.
+# (name, road kind, depot). Depots are the termini plus one cold-storage hub per corridor;
+# the hubs are illustrative placements, not real facilities.
 CORRIDORS: dict[str, dict[str, Any]] = {
     "RT-LAG-ABJ": {
         "name": "Lagos to Abuja",
         "towns": [
-            ("Lagos Mainland", "urban"),
-            ("Ikeja", "urban"),
-            ("Ikorodu", "highway"),
-            ("Sagamu Junction", "highway"),
-            ("Ibadan", "urban"),
-            ("Oshogbo", "highway"),
-            ("Ilorin", "urban"),
-            ("Mokwa", "highway"),
-            ("Abuja", "urban"),
+            ("Lagos Mainland", "urban", True),
+            ("Ikeja", "urban", False),
+            ("Ikorodu", "highway", False),
+            ("Sagamu Junction", "highway", False),
+            ("Ibadan", "urban", True),
+            ("Oshogbo", "highway", False),
+            ("Ilorin", "urban", False),
+            ("Mokwa", "highway", False),
+            ("Abuja", "urban", True),
         ],
         "dead_zones": [("Jebba-Mokwa stretch", 430.0, 470.0), ("Bida approach", 640.0, 662.0)],
     },
     "RT-PHC-MKD": {
         "name": "Port Harcourt to Makurdi",
         "towns": [
-            ("Port Harcourt", "urban"),
-            ("Elele", "highway"),
-            ("Owerri", "urban"),
-            ("Okigwe", "highway"),
-            ("Enugu", "urban"),
-            ("Nsukka", "highway"),
-            ("Makurdi", "urban"),
+            ("Port Harcourt", "urban", True),
+            ("Elele", "highway", False),
+            ("Owerri", "urban", False),
+            ("Okigwe", "highway", False),
+            ("Enugu", "urban", True),
+            ("Nsukka", "highway", False),
+            ("Makurdi", "urban", True),
         ],
         "dead_zones": [("Otukpo approach", 430.0, 465.0)],
     },
     "RT-BEN-ABJ": {
         "name": "Benin to Abuja",
         "towns": [
-            ("Benin City", "urban"),
-            ("Ekpoma", "highway"),
-            ("Auchi", "urban"),
-            ("Okene", "highway"),
-            ("Lokoja", "urban"),
-            ("Abaji", "highway"),
-            ("Abuja", "urban"),
+            ("Benin City", "urban", True),
+            ("Ekpoma", "highway", False),
+            ("Auchi", "urban", False),
+            ("Okene", "highway", False),
+            ("Lokoja", "urban", True),
+            ("Abaji", "highway", False),
+            ("Abuja", "urban", True),
         ],
         "dead_zones": [("Okene hills", 180.0, 205.0), ("Lokoja-Abaji gap", 360.0, 395.0)],
     },
 }
 
 URBAN_RADIUS_KM = 12.0  # stretch around an urban stop that drives at urban speeds
-SIMPLIFY_TOLERANCE_KM = 0.025
+SIMPLIFY_TOLERANCE_KM = 0.003  # at most 3 m off the road: faithful at street zoom
 # Per-minute Markov transition probabilities for the cellular link (synthetic).
 SIGNAL = {
     "urban": {"p_drop": 0.002, "p_recover": 0.5},
@@ -90,8 +93,8 @@ def build(raw_dir: Path) -> dict[str, Any]:
         for leg in route["legs"]:
             town_km.append(town_km[-1] + leg["distance"] / 1000)
         towns = [
-            {"name": name, "km": round(at, 2), "kind": kind}
-            for (name, kind), at in zip(spec["towns"], town_km, strict=True)
+            {"name": name, "km": round(at, 2), "kind": kind, "depot": depot}
+            for (name, kind, depot), at in zip(spec["towns"], town_km, strict=True)
         ]
         segments = road_class_segments(towns, town_km[-1])
         features.append(
@@ -154,10 +157,63 @@ def segment(a: float, b: float, road_class: str) -> dict[str, Any]:
     }
 
 
+def console_export(collection: dict[str, Any]) -> dict[str, Any]:
+    """The same geometry for the operator console: one LineString per corridor plus station
+    points, so vehicle positions in the fleet-state recording sit exactly on the drawn road."""
+    features: list[dict[str, Any]] = []
+    for feature in collection["features"]:
+        props = feature["properties"]
+        route = Route(feature)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": feature["geometry"],
+                "properties": {
+                    "id": props["route_id"],
+                    "name": props["name"],
+                    "length_km": props["length_km"],
+                    "source": "osrm",
+                    "attribution": collection["attribution"],
+                    "dead_zones": [
+                        {"name": z["name"], "from_km": z["from_km"], "to_km": z["to_km"]}
+                        for z in props["dead_zones"]
+                    ],
+                },
+            }
+        )
+        for town in props["towns"]:
+            lat, lon, _ = route.position(town["km"])
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
+                    "properties": {
+                        "corridor_id": props["route_id"],
+                        "name": town["name"],
+                        "km_along": town["km"],
+                        "depot": town["depot"],
+                    },
+                }
+            )
+    return {
+        "type": "FeatureCollection",
+        "attribution": collection["attribution"],
+        "features": features,
+    }
+
+
+def write(path: Path, doc: dict[str, Any]) -> None:
+    path.write_text(json.dumps(doc, separators=(",", ":")) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {path} ({path.stat().st_size} bytes)")
+
+
 def main() -> None:
+    """build_routes <raw dir> <simulator geojson> [<console geojson>]"""
     raw_dir, out = Path(sys.argv[1]), Path(sys.argv[2])
-    out.write_text(json.dumps(build(raw_dir), separators=(",", ":")) + "\n", encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    collection = build(raw_dir)
+    write(out, collection)
+    if len(sys.argv) > 3:
+        write(Path(sys.argv[3]), console_export(collection))
 
 
 if __name__ == "__main__":

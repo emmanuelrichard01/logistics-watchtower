@@ -25,7 +25,7 @@ mkdir -p data/routes/osrm
 curl -o data/routes/osrm/RT-LAG-ABJ.json "http://router.project-osrm.org/route/v1/driving/3.3941,6.4550;3.3683,6.5962;3.6472,6.8256;3.7196,6.8926;3.9398,7.3768;4.4984,7.7027;4.5522,8.4904;5.9667,8.8500;7.4985,9.0563?overview=full&geometries=geojson"
 curl -o data/routes/osrm/RT-PHC-MKD.json "http://router.project-osrm.org/route/v1/driving/7.0498,4.8156;7.3678,5.1117;7.0354,5.4851;7.1194,6.0072;7.5464,6.4584;7.3833,6.8833;8.5218,7.7322?overview=full&geometries=geojson"
 curl -o data/routes/osrm/RT-BEN-ABJ.json "http://router.project-osrm.org/route/v1/driving/5.6175,6.3392;6.0922,6.7428;6.1360,7.1706;6.2343,7.5629;6.7455,8.0069;7.1500,8.5000;7.4800,9.0600?overview=full&geometries=geojson"
-uv run python -m watchtower_simulator.build_routes data/routes/osrm data/routes/corridors.geojson
+uv run python -m watchtower_simulator.build_routes data/routes/osrm data/routes/corridors.geojson apps/dashboard-fixtures/corridors.geojson
 ```
 
-The raw responses (`data/routes/osrm/`) are not committed. Lines are simplified with Ramer-Douglas-Peucker at 25 m, and the simplified length stays within 0.06% of OSRM's distance.
+The raw responses (`data/routes/osrm/`) are not committed. Lines are simplified with Ramer-Douglas-Peucker at 3 m (no point of the road is more than 3 m from the line), and the simplified length stays within 0.06% of OSRM's distance.

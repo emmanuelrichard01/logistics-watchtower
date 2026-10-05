@@ -448,7 +448,7 @@ class Simulation:
             "t": iso(now),
             "vehicle_id": v.spec.vehicle_id,
             "route_id": v.route.route_id,
-            "km": round(v.km, 3),
+            "km_along": round(v.km, 3),
             "lat": round(lat, 6),
             "lon": round(lon, 6),
             "speed_kmh": round(v.speed_kmh, 1),
