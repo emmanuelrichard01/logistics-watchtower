@@ -55,5 +55,7 @@ def test_file_stays_small() -> None:
 def test_recorded_positions_lie_on_the_corridor_line(path: Path) -> None:
     for line in path.read_text(encoding="utf-8").splitlines()[::50]:
         row = json.loads(line)
+        if row["off_route_km"] > 0:
+            continue  # a hijacked truck has left the corridor on purpose
         lat, lon, _ = ROUTES[row["route_id"]].position(row["km_along"])
         assert haversine_km((row["lon"], row["lat"]), (lon, lat)) < 0.001

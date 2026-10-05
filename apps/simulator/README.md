@@ -36,6 +36,7 @@ The real device reporting rate hasn't been decided. Devices report every **30 s*
 | `environment.py` | NOAA sun position, clear-sky irradiance, sol-air solar load by heading, seeded storms and Harmattan haze | Standard equations; illustrative rates |
 | `operations.py` | Checkpoints, tolls, weighbridge, fuel and diesel queues, congestion, drivers, rest and night rules, drops | Illustrative |
 | `faults.py` | Composable probe, GPS and clock faults | Illustrative |
+| `incidents.py` | Hijack detour off the corridor | Scenario-driven |
 | `channel.py`, `device.py` | Markov link, dead zones, ring buffer with throttled in-order replay, at-least-once duplicates, reboots | Illustrative rates |
 
 ## Scenarios
@@ -49,6 +50,9 @@ Scenarios live in `data/scenarios/<name>.yaml`, with ground truth in `<name>.lab
 - `defrost` (`duration`)
 - `link_outage` (`duration`)
 - `reboot`
+- `breakdown` (`duration`): engine-off stop, reefer on genset
+- `tyre_blowout` (`duration`, default 75m): sudden deceleration and a stop for the change
+- `hijack` (`deviate_km`, `door_open`, optional `tracker_off_after`, `bearing_offset_deg`): leaves the corridor, unexplained stop, door opened, tracker optionally cut
 - `sensor_fault` (`fault` plus its parameters, optional `duration`). The faults are `offset`, `drift`, `flatline`, `spike`, `dropout` and `swap` (probe faults with `probe: supply_air|return_air|cargo_probe`), and `gps_multipath`, `gps_jump` and `clock_skew` (`offset_s`, `drift_ppm`, `gps_sync_after`). They compose in injection order and appear in truth as `fault_<kind>[_<probe>]`.
 
 Scenarios with `operations: true` add the road and operations model: checkpoints, tolls, weighbridges, fuel stops, congestion, driver profiles (`driver:`), `fleet_policy` (`no_night_driving`, `max_drive_h`, `rest_min`) and multi-drop deliveries (`drops: [{km, pallets}]`).

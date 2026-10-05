@@ -1,0 +1,16 @@
+# TRK-B11 breaks down for six hours with the engine off; the reefer falls back to its
+# genset, which has only 4 L of diesel, runs dry, and the pharma load starts to warm.
+# TRK-B12 blows a tyre at highway speed and stops for the change.
+# Correct behaviour: a breakdown alert, reefer power loss caught before the breach, and a
+# blowout (harsh deceleration plus an unplanned stop) that isn't mistaken for theft.
+name: breakdown_and_blowout
+seed: 1111
+start: 2026-03-12T09:00:00Z
+duration: 8h
+named_dead_zones: false
+fleet:
+  - {vehicle_id: TRK-B11, route: RT-BEN-ABJ, start_km: 230, cargo_profile: pharma_2_8, pallets: 4, genset_l: 4}
+  - {vehicle_id: TRK-B12, route: RT-PHC-MKD, start_km: 140, cargo_profile: frozen, pallets: 20}
+events:
+  - {at: 30m, vehicle: TRK-B11, type: breakdown, duration: 6h}
+  - {at: 50m, vehicle: TRK-B12, type: tyre_blowout, duration: 75m}

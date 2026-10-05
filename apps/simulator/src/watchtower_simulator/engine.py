@@ -15,6 +15,7 @@ on a paced clock.
 
 import math
 import random
+from bisect import insort
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -26,6 +27,7 @@ from watchtower_simulator.clock import iso, rng, to_datetime, to_ms
 from watchtower_simulator.device import Delivery, DeliveryPolicy, Device, Reading
 from watchtower_simulator.environment import Conditions, Weather, conditions
 from watchtower_simulator.faults import ClockSkew, Fault, make_fault
+from watchtower_simulator.incidents import Detour
 from watchtower_simulator.operations import (
     DRIVERS,
     Drop,
@@ -114,13 +116,16 @@ class VehicleSim:
     cond: Conditions | None = None  # this tick's environment
     operations: Operations | None = None
     faults: list[Fault] = field(default_factory=lambda: [])
+    detour: Detour | None = None  # hijacked off the corridor
     open_truth: dict[str, int] = field(default_factory=lambda: {})
 
     _pos_km: float = field(default=-1.0, repr=False)
     _pos: tuple[float, float, float] = field(default=(0.0, 0.0, 0.0), repr=False)
 
     def position(self) -> tuple[float, float, float]:
-        """(lat, lon, heading) at the current km, computed once per move."""
+        """(lat, lon, heading) at the current km (or on the detour), cached per move."""
+        if self.detour is not None:
+            return self.detour.position()
         if self.km != self._pos_km:
             self._pos, self._pos_km = self.route.position(self.km), self.km
         return self._pos
@@ -204,7 +209,7 @@ class Simulation:
             reefer=Reefer(
                 params=replace(self.reefer_params, **spec.extra.get("reefer", {})),
                 humidity_pct=profile.box_humidity_pct,
-                genset_l=stream.uniform(60.0, 170.0),
+                genset_l=float(spec.extra.get("genset_l", stream.uniform(60.0, 170.0))),
                 # Stagger the defrost schedule so a fleet doesn't defrost in lockstep.
                 last_defrost_end_ms=s.start_ms - int(stream.uniform(0, 6) * 3_600_000),
             ),
@@ -273,6 +278,27 @@ class Simulation:
                 v.outage_until_ms = until
             case "reboot":
                 v.device.reboot()
+            case "breakdown":
+                self.begin_stop(v, now_ms, "breakdown", (until - now_ms) / 1000, "breakdown")
+            case "tyre_blowout":
+                v.speed_kmh *= 0.25
+                self.point_truth(v, now_ms, "tyre_blowout")
+                self.point_truth(v, now_ms, "harsh_brake")
+                dur = duration_ms(p.get("duration", "75m")) / 1000
+                self.begin_stop(v, now_ms, "unplanned", dur, "tyre_change")
+            case "hijack":
+                lat, lon, heading = v.position()
+                off = p.get("tracker_off_after")
+                v.detour = Detour(
+                    start_ms=now_ms,
+                    origin_lat=lat,
+                    origin_lon=lon,
+                    bearing_deg=(heading + float(p.get("bearing_offset_deg", 90.0))) % 360,
+                    target_km=float(p.get("deviate_km", 12.0)),
+                    stop_s=0.0,
+                    door_open_s=duration_ms(p.get("door_open", "40m")) / 1000,
+                    tracker_off_after_s=duration_ms(off) / 1000 if off else None,
+                )
             case "sensor_fault":
                 params = {k: x for k, x in p.items() if k not in ("fault", "duration")}
                 if "gps_sync_after" in params:
@@ -281,6 +307,10 @@ class Simulation:
                 v.faults.append(make_fault(str(p["fault"]), now_ms, end, params))
             case other:
                 raise ValueError(f"unknown event type {other!r}")
+
+    def schedule(self, event: Event) -> None:
+        """Queue an event for later in the run, keeping the queue in time order."""
+        insort(self.pending, event, key=lambda e: e.at_ms)
 
     def inject(self, vehicle: str, type: str, params: dict[str, Any], now_ms: int) -> None:
         """Apply an event immediately (live mode's fault injection)."""
@@ -380,7 +410,11 @@ class Simulation:
         excursion = not v.profile.in_range(v.thermal.cargo_c)
 
         interval = v.burst_interval_ms if self.alarm(v, i) else v.base_interval_ms
-        if v.last_sample_ms is None or now - v.last_sample_ms >= interval:
+        tracker_off = v.detour is not None and v.detour.tracker_off(now)
+        if tracker_off:
+            v.link_up, v.signal_dbm = False, None
+            out = []  # power cut: nothing sampled, nothing buffered, nothing sent
+        elif v.last_sample_ms is None or now - v.last_sample_ms >= interval:
             v.last_sample_ms = now
             reading = self.reading(v, i, lat, lon, heading)
             for fault in v.faults:
@@ -409,6 +443,9 @@ class Simulation:
                 "storm": c.storm,
                 **self.stop_flags(v, now),
                 **self.fault_flags(v, now),
+                "route_deviation": v.detour is not None,
+                "unexplained_stop": self.stop_reason(v, now) == "unexplained",
+                "tracker_offline": tracker_off,
             },
         )
         if record:
@@ -462,6 +499,9 @@ class Simulation:
             v.speed_kmh = 0.0
         distance = v.speed_kmh * dt_s / 3600
         prev_km = v.km
+        if v.detour is not None:
+            self.drive_detour(v, now, distance)
+            return
         v.km = min(v.route.length_km, v.km + distance)
         v.fuel_pct = max(0.0, v.fuel_pct - distance * LITRES_PER_KM / TANK_LITRES * 100)
         if ops is not None and not stopped:
@@ -471,6 +511,29 @@ class Simulation:
             request = ops.next_stop(prev_km, v.km, now, v.fuel_pct, v.moving(), dt_s)
             if request is not None:
                 self.begin_stop(v, now, request.stop_type, request.duration_s, request.reason)
+
+    def stop_reason(self, v: VehicleSim, now: int) -> str | None:
+        stop = v.active_stop(now)
+        return stop.reason if stop is not None else None
+
+    def drive_detour(self, v: VehicleSim, now: int, distance_km: float) -> None:
+        """Off the corridor: drive the side road, then park there for good."""
+        d = v.detour
+        assert d is not None
+        v.fuel_pct = max(0.0, v.fuel_pct - distance_km * LITRES_PER_KM / TANK_LITRES * 100)
+        if d.stopped_at_ms is not None:
+            return
+        d.travelled_km = min(d.target_km, d.travelled_km + distance_km)
+        v.target_kmh = min(v.target_kmh, 40.0)  # side roads
+        if d.arrived():
+            d.stopped_at_ms = now
+            end = self.scenario.start_ms + self.scenario.duration_ms + 1
+            v.stop = Stop(STOP_TYPES["unplanned"], now, end, "unexplained")
+            # They pull up first, then open the cargo door a few minutes later.
+            door = {"duration": f"{d.door_open_s}s"}
+            self.schedule(
+                Event(now + 300_000 - self.scenario.start_ms, v.spec.vehicle_id, "door_open", door)
+            )
 
     def begin_stop(
         self, v: VehicleSim, now: int, stop_type: str, duration_s: float, reason: str
@@ -593,6 +656,7 @@ class Simulation:
             "power_source": r.power_source,
             "genset_fuel_l": round(r.genset_l, 1),
             "faults": sorted({f.truth_kind for f in v.faults if f.active(now)}),
+            "off_route_km": round(v.detour.travelled_km, 2) if v.detour else 0.0,
             "link_up": v.link_up,
             "signal_dbm": v.signal_dbm,
             "buffered": bool(v.device.buffer),

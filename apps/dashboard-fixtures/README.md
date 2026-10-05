@@ -43,7 +43,8 @@ The geometry is real roads from OpenStreetMap, routed by OSRM. Attribution is re
 | `vehicle_id` | string | e.g. `TRK-101` |
 | `route_id` | string | `RT-LAG-ABJ`, `RT-PHC-MKD` or `RT-BEN-ABJ` (geometry in `data/routes/corridors.geojson`) |
 | `km_along` | number | Distance along the corridor line in `corridors.geojson`; split the line here to draw travelled versus remaining route, or use the station km posts for the lane diagram |
-| `lat`, `lon` | number | True position (WGS84), exactly on the corridor line |
+| `lat`, `lon` | number | True position (WGS84), exactly on the corridor line unless `off_route_km` > 0 |
+| `off_route_km` | number | How far a hijacked truck has been driven off the corridor (0 normally); `km_along` freezes at the turn-off |
 | `speed_kmh`, `heading_deg` | number | Speed, and compass heading of the current road segment |
 | `cargo_profile` | string | `frozen`, `pharma_2_8`, `bananas` or `fresh_produce` |
 | `setpoint_c`, `min_c`, `max_c` | number | Profile setpoint and allowed cargo range |
